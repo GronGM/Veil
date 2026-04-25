@@ -165,7 +165,7 @@ Reference mapping from GMvpn:
 - Public Interfaces: `IncidentReporter`, `SupportBundleExporter`, `RedactionPolicy`.
 - Dependencies: `veil-core`, `veil-routing`, `veil-policy`, `veil-adapter-api`.
 - Hot-swappable Parts: storage/export target may vary; redaction policy remains core-owned.
-- MVP Scope: support bundle and incident summary parity with the GMvpn reference semantics.
+- MVP Scope: support bundle and incident summary parity with the GMvpn reference semantics, plus redacted manifest, route, and policy diagnostics views that are safe to show in local CLI output by default.
 - v1 Scope: bounded structured diagnostics packs and better correlation IDs.
 - v2/Research Scope: fleet-facing aggregation or external support integrations.
 - Failure Modes: leaking sensitive fields, drift between CLI output and bundle contents, truncated evidence hiding cause of failure.
@@ -207,7 +207,7 @@ Reference mapping from GMvpn:
 - Public Interfaces: command-line commands, dry-run/reporting output, local validation subcommands.
 - Dependencies: every core module, but no backend-specific logic beyond adapter selection.
 - Hot-swappable Parts: output formatters and command surface can evolve independently of control-plane logic.
-- MVP Scope: dry-run and report-focused local CLI.
+- MVP Scope: dry-run and report-focused local CLI with safe redacted output by default, file-based policy overrides, and explicit opt-in raw JSON output for deeper debugging.
 - v1 Scope: subcommand-oriented UX and richer diagnostics commands.
 - v2/Research Scope: local API server or GUI integration shell.
 - Failure Modes: CLI output drifting from support bundle, contract mismatch hidden by permissive flags, local override precedence confusion.
@@ -241,7 +241,7 @@ Required MVP checks:
 - session lifecycle and startup recovery tests
 - adapter contract tests with mocks
 - Xray renderer and preflight smoke tests
-- support bundle redaction and parity tests
+- support bundle redaction and parity tests, including manifest, route, and policy diagnostics views
 
 Target command set once the Rust prototype exists in a Rust-enabled environment:
 
@@ -258,6 +258,8 @@ Target command set once the Rust prototype exists in a Rust-enabled environment:
 - Xray as first backend adapter
 - signed manifests and provider-profile compatibility
 - explainable route selection and diagnostics parity
+- redacted manifest, route, and policy diagnostics surfaces in the local support bundle
+- report-focused local CLI with redacted default output and explicit raw JSON opt-in
 - static in-process adapter registration
 
 ### v1

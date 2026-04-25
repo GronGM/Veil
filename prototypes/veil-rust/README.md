@@ -6,6 +6,7 @@ Current purpose:
 
 - establish reviewable crate boundaries from `docs/veil-architecture-rfc.md`
 - provide dry-run-only scaffolding for the first adapter and control-plane surfaces
+- exercise a typed policy layer before real networking and process supervision exist
 
 Current crates:
 
@@ -25,6 +26,36 @@ Intentional limitations:
 - no real signature verification yet
 - no dynamic plugin loading
 - no production readiness claims
+
+Recent prototype slice:
+
+- `veil-policy` now carries typed route policy structs for backend and transport allow/deny, region preferences, cooldown gating, known-good bias, and fallback mode
+- `veil-routing` now uses those policy decisions to reject ineligible routes with explainable reasons
+- `veil-cli demo` now accepts simple policy overrides and prints rejected routes separately from the selected route summary
+- `veil-cli demo --policy-file <path>` now accepts partial JSON policy overrides, then lets CLI flags override those file values
+- `support_bundle` now includes a dedicated `route_diagnostics` section with selected route, fallback state, and rejected candidate reasons
+- `support_bundle` now also includes `redacted_route_diagnostics`, which masks token-like values, private keys, credential-bearing URLs, and UUID-like secrets by default
+- `support_bundle` now includes `redacted_policy_diagnostics`, which preserves policy shape while masking secret-like override values in lists and strings
+- `veil-cli demo` now prints a compact human-readable diagnostics summary before the detailed JSON sections
+- `support_bundle` now includes `redacted_manifest_diagnostics`, so the safe diagnostics surface covers manifest, route, and policy together
+- `veil-cli demo` now defaults to report-focused redacted output and prints raw route/bundle JSON only when `--raw-json` is explicitly requested
+- `veil-cli demo --export-redacted-bundle <path>` now writes a redacted diagnostics artifact to disk for later review or attachment
+
+Example policy files:
+
+- `examples/policies/deny-xray.json` - forces a policy-level backend rejection for the demo path
+- `examples/policies/prefer-eu-stable.json` - biases selection toward European routes with a stronger stability posture
+- `examples/policies/strict-fallback.json` - disables known-good fallback so cooldown and retry rules stay strict
+
+Example demo commands once Rust toolchain is available:
+
+```bash
+cargo run -p veil-cli -- demo --policy-file examples/policies/deny-xray.json
+cargo run -p veil-cli -- demo --policy-file examples/policies/prefer-eu-stable.json
+cargo run -p veil-cli -- demo --policy-file examples/policies/strict-fallback.json --deny-transport https
+cargo run -p veil-cli -- demo --policy-file examples/policies/prefer-eu-stable.json --raw-json
+cargo run -p veil-cli -- demo --policy-file examples/policies/prefer-eu-stable.json --export-redacted-bundle output/demo-redacted-bundle.json
+```
 
 Validation commands once Rust toolchain is available:
 

@@ -8,4 +8,4 @@ version.workspace = true
 serde.workspace = true
 veil-manifest = { path = "../veil-manifest" }
 veil-policy = { path = "../veil-policy" }
-
+veil-routing = { path = "../veil-routing" }

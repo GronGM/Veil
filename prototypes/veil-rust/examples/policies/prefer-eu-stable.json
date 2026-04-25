@@ -1,0 +1,11 @@
+{
+  "route_preference": "prefer-stability",
+  "regions": {
+    "preferred": ["eu-central"],
+    "allow": ["eu-central", "eu-west"]
+  },
+  "known_good": {
+    "enabled": true,
+    "bonus_points": 5
+  }
+}

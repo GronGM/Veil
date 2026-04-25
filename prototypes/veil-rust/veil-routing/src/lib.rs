@@ -2,6 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 use veil_manifest::{Endpoint, ProviderManifest};
+use veil_policy::{
+    evaluate_route_policy, FallbackMode, PolicyEvaluation, PolicyEvaluationInput,
+    RouteSelectionPolicy,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetryBudget {
@@ -52,6 +56,7 @@ pub struct SelectionContext {
     pub last_known_good_endpoint_id: Option<String>,
     pub retry_budget: RetryBudget,
     pub runtime_state: RouteRuntimeState,
+    pub policy: RouteSelectionPolicy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,9 +84,23 @@ pub struct RouteCandidate {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RejectedRouteCandidate {
+    pub endpoint_id: String,
+    pub reasons: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RouteSelection {
     pub selected: RouteCandidate,
     pub candidates: Vec<RouteCandidate>,
+    pub rejected: Vec<RejectedRouteCandidate>,
+    pub fallback_triggered: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RouteSelectionError {
+    pub detail: String,
+    pub rejected: Vec<RejectedRouteCandidate>,
 }
 
 impl RouteSelection {
@@ -93,11 +112,13 @@ impl RouteSelection {
             .collect::<Vec<_>>()
             .join("->");
         format!(
-            "selected={} score={} retry_budget={} order={}",
+            "selected={} score={} retry_budget={} order={} rejected={} fallback={}",
             self.selected.endpoint.id,
             self.selected.score.total_score,
             self.candidates.len(),
-            ordered_ids
+            ordered_ids,
+            self.rejected.len(),
+            self.fallback_triggered
         )
     }
 }
@@ -105,16 +126,68 @@ impl RouteSelection {
 pub fn select_best_route(
     manifest: &ProviderManifest,
     context: &SelectionContext,
-) -> Option<RouteSelection> {
-    let mut candidates = manifest
-        .endpoints
-        .iter()
-        .cloned()
-        .map(|endpoint| RouteCandidate {
-            score: score_endpoint(&endpoint, context),
-            endpoint,
-        })
-        .collect::<Vec<_>>();
+) -> Result<RouteSelection, RouteSelectionError> {
+    let mut candidates = Vec::new();
+    let mut rejected = Vec::new();
+    let mut fallback_triggered = false;
+
+    for endpoint in &manifest.endpoints {
+        let runtime_state = context
+            .runtime_state
+            .endpoints
+            .iter()
+            .find(|state| state.endpoint_id == endpoint.id);
+        let evaluation = evaluate_route_policy(
+            &context.policy,
+            &PolicyEvaluationInput {
+                endpoint_id: endpoint.id.clone(),
+                backend_name: endpoint
+                    .dataplane
+                    .clone()
+                    .unwrap_or_else(|| "xray-core".to_string()),
+                transport: endpoint.transport.clone(),
+                region: endpoint.region.clone(),
+                is_known_good: context.last_known_good_endpoint_id.as_deref()
+                    == Some(endpoint.id.as_str()),
+                cooling_down: runtime_state
+                    .map(|state| state.cooldown.cooling_down)
+                    .unwrap_or(false),
+                locally_disabled: runtime_state
+                    .map(|state| state.locally_disabled)
+                    .unwrap_or(false),
+            },
+        );
+
+        if evaluation.is_hard_rejected() {
+            rejected.push(RejectedRouteCandidate {
+                endpoint_id: endpoint.id.clone(),
+                reasons: evaluation.hard_rejections,
+            });
+            continue;
+        }
+
+        if evaluation.requires_fallback() {
+            let is_known_good = context.last_known_good_endpoint_id.as_deref()
+                == Some(endpoint.id.as_str());
+            let allow_known_good_fallback =
+                context.policy.fallback == FallbackMode::AllowKnownGood && is_known_good;
+
+            if !allow_known_good_fallback {
+                rejected.push(RejectedRouteCandidate {
+                    endpoint_id: endpoint.id.clone(),
+                    reasons: evaluation.soft_rejections,
+                });
+                continue;
+            }
+
+            fallback_triggered = true;
+        }
+
+        candidates.push(RouteCandidate {
+            score: score_endpoint(endpoint, context, evaluation),
+            endpoint: endpoint.clone(),
+        });
+    }
 
     candidates.sort_by(|left, right| {
         right
@@ -127,11 +200,27 @@ pub fn select_best_route(
     let max_candidates = context.retry_budget.max_candidates.max(1);
     candidates.truncate(max_candidates);
 
-    let selected = candidates.first().cloned()?;
-    Some(RouteSelection { selected, candidates })
+    let selected = candidates
+        .first()
+        .cloned()
+        .ok_or_else(|| RouteSelectionError {
+            detail: "no route satisfied the active policy and runtime constraints".to_string(),
+            rejected: rejected.clone(),
+        })?;
+
+    Ok(RouteSelection {
+        selected,
+        candidates,
+        rejected,
+        fallback_triggered,
+    })
 }
 
-fn score_endpoint(endpoint: &Endpoint, context: &SelectionContext) -> ScoreBreakdown {
+fn score_endpoint(
+    endpoint: &Endpoint,
+    context: &SelectionContext,
+    evaluation: PolicyEvaluation,
+) -> ScoreBreakdown {
     let runtime_state = context
         .runtime_state
         .endpoints
@@ -179,11 +268,6 @@ fn score_endpoint(endpoint: &Endpoint, context: &SelectionContext) -> ScoreBreak
         reasons.push("preferred-dataplane".to_string());
     }
 
-    if last_known_good_bonus {
-        total_score += 3;
-        reasons.push("last-known-good".to_string());
-    }
-
     total_score += health_score;
     reasons.push(format!("health-score={health_score}"));
 
@@ -210,6 +294,13 @@ fn score_endpoint(endpoint: &Endpoint, context: &SelectionContext) -> ScoreBreak
     if let Some(bucket) = &last_failure_bucket {
         reasons.push(format!("last-failure-bucket={}", failure_bucket_name(bucket)));
     }
+
+    if last_known_good_bonus {
+        reasons.push("last-known-good".to_string());
+    }
+
+    total_score += evaluation.score_adjustment;
+    reasons.extend(evaluation.reasons);
 
     ScoreBreakdown {
         endpoint_id: endpoint.id.clone(),
@@ -262,7 +353,7 @@ pub fn demo_runtime_state() -> RouteRuntimeState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use veil_manifest::demo_provider_manifest;
+    use veil_manifest::{demo_provider_manifest, Endpoint};
 
     #[test]
     fn selection_prefers_matching_xray_candidate() {
@@ -274,6 +365,7 @@ mod tests {
                 last_known_good_endpoint_id: None,
                 retry_budget: RetryBudget { max_candidates: 2 },
                 runtime_state: demo_runtime_state(),
+                policy: RouteSelectionPolicy::default(),
             },
         )
         .expect("selection should exist");
@@ -295,6 +387,7 @@ mod tests {
                 last_known_good_endpoint_id: Some("edge-1".to_string()),
                 retry_budget: RetryBudget { max_candidates: 2 },
                 runtime_state: demo_runtime_state(),
+                policy: RouteSelectionPolicy::default(),
             },
         )
         .expect("selection should exist");
@@ -303,24 +396,123 @@ mod tests {
     }
 
     #[test]
-    fn locally_disabled_endpoint_is_penalized() {
+    fn denylisted_backend_is_not_selected() {
         let manifest = demo_provider_manifest();
-        let selection = select_best_route(
+        let mut policy = RouteSelectionPolicy::default();
+        policy.backends.deny = vec!["xray-core".to_string()];
+
+        let error = select_best_route(
             &manifest,
             &SelectionContext {
                 client_platform: "linux".to_string(),
                 last_known_good_endpoint_id: None,
                 retry_budget: RetryBudget { max_candidates: 1 },
+                runtime_state: demo_runtime_state(),
+                policy,
+            },
+        )
+        .expect_err("selection should fail");
+
+        assert!(
+            error
+                .rejected
+                .iter()
+                .flat_map(|candidate| candidate.reasons.iter())
+                .any(|reason| reason.contains("denylisted"))
+        );
+    }
+
+    #[test]
+    fn known_good_influences_selection() {
+        let mut manifest = demo_provider_manifest();
+        manifest.endpoints.push(Endpoint {
+            id: "edge-2".to_string(),
+            host: "198.51.100.20".to_string(),
+            port: 443,
+            transport: "https".to_string(),
+            region: "us-east".to_string(),
+            dataplane: Some("xray-core".to_string()),
+            supported_client_platforms: vec!["linux".to_string()],
+            logical_server: Some("edge".to_string()),
+            provider_profile_schema_version: Some(1),
+            xray: manifest.endpoints[0].xray.clone(),
+        });
+
+        let selection = select_best_route(
+            &manifest,
+            &SelectionContext {
+                client_platform: "linux".to_string(),
+                last_known_good_endpoint_id: Some("edge-2".to_string()),
+                retry_budget: RetryBudget { max_candidates: 2 },
+                runtime_state: RouteRuntimeState {
+                    endpoints: vec![
+                        EndpointRuntimeState {
+                            endpoint_id: "edge-1".to_string(),
+                            cooldown: CooldownState {
+                                cooling_down: false,
+                                remaining_seconds: 0,
+                            },
+                            locally_disabled: false,
+                            health_score: 2,
+                            last_failure_bucket: None,
+                            reenable: ReenableState {
+                                pending: false,
+                                ready: false,
+                                backoff_seconds: 0,
+                            },
+                        },
+                        EndpointRuntimeState {
+                            endpoint_id: "edge-2".to_string(),
+                            cooldown: CooldownState {
+                                cooling_down: false,
+                                remaining_seconds: 0,
+                            },
+                            locally_disabled: false,
+                            health_score: 0,
+                            last_failure_bucket: None,
+                            reenable: ReenableState {
+                                pending: false,
+                                ready: false,
+                                backoff_seconds: 0,
+                            },
+                        },
+                    ],
+                },
+                policy: RouteSelectionPolicy::default(),
+            },
+        )
+        .expect("selection should exist");
+
+        assert_eq!(selection.selected.endpoint.id, "edge-2");
+        assert!(
+            selection
+                .selected
+                .score
+                .reasons
+                .iter()
+                .any(|reason| reason == "known-good-bonus=3")
+        );
+    }
+
+    #[test]
+    fn fallback_applies_predictably_for_known_good_endpoint() {
+        let manifest = demo_provider_manifest();
+        let selection = select_best_route(
+            &manifest,
+            &SelectionContext {
+                client_platform: "linux".to_string(),
+                last_known_good_endpoint_id: Some("edge-1".to_string()),
+                retry_budget: RetryBudget { max_candidates: 1 },
                 runtime_state: RouteRuntimeState {
                     endpoints: vec![EndpointRuntimeState {
                         endpoint_id: "edge-1".to_string(),
                         cooldown: CooldownState {
-                            cooling_down: false,
-                            remaining_seconds: 0,
+                            cooling_down: true,
+                            remaining_seconds: 90,
                         },
-                        locally_disabled: true,
+                        locally_disabled: false,
                         health_score: 0,
-                        last_failure_bucket: Some(FailureBucket::TransportRejected),
+                        last_failure_bucket: Some(FailureBucket::EndpointDown),
                         reenable: ReenableState {
                             pending: false,
                             ready: false,
@@ -328,58 +520,40 @@ mod tests {
                         },
                     }],
                 },
+                policy: RouteSelectionPolicy::default(),
             },
         )
-        .expect("selection should exist");
+        .expect("known-good fallback should allow selection");
 
-        assert!(selection.selected.score.locally_disabled);
-        assert!(selection.selected.score.total_score < 0);
-        assert_eq!(
-            selection.selected.score.last_failure_bucket,
-            Some(FailureBucket::TransportRejected)
-        );
+        assert!(selection.fallback_triggered);
+        assert_eq!(selection.selected.endpoint.id, "edge-1");
     }
 
     #[test]
-    fn pending_reenable_is_explained_in_score_breakdown() {
+    fn explainable_error_is_returned_when_everything_is_rejected() {
         let manifest = demo_provider_manifest();
-        let selection = select_best_route(
+        let mut policy = RouteSelectionPolicy::default();
+        policy.transports.allow = vec!["quic".to_string()];
+
+        let error = select_best_route(
             &manifest,
             &SelectionContext {
                 client_platform: "linux".to_string(),
                 last_known_good_endpoint_id: None,
                 retry_budget: RetryBudget { max_candidates: 1 },
-                runtime_state: RouteRuntimeState {
-                    endpoints: vec![EndpointRuntimeState {
-                        endpoint_id: "edge-1".to_string(),
-                        cooldown: CooldownState {
-                            cooling_down: false,
-                            remaining_seconds: 0,
-                        },
-                        locally_disabled: false,
-                        health_score: 0,
-                        last_failure_bucket: Some(FailureBucket::TlsInterference),
-                        reenable: ReenableState {
-                            pending: true,
-                            ready: false,
-                            backoff_seconds: 120,
-                        },
-                    }],
-                },
+                runtime_state: demo_runtime_state(),
+                policy,
             },
         )
-        .expect("selection should exist");
+        .expect_err("selection should fail");
 
-        assert!(selection.selected.score.reenable_pending);
-        assert!(!selection.selected.score.reenable_ready);
-        assert_eq!(selection.selected.score.reenable_backoff_seconds, 120);
+        assert!(error.detail.contains("no route satisfied"));
         assert!(
-            selection
-                .selected
-                .score
-                .reasons
+            error
+                .rejected
                 .iter()
-                .any(|reason| reason == "reenable-backoff=120s")
+                .flat_map(|candidate| candidate.reasons.iter())
+                .any(|reason| reason.contains("allowlist"))
         );
     }
 }

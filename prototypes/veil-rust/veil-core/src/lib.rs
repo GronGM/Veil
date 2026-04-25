@@ -5,10 +5,18 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 use veil_adapter_api::{AdapterContext, AdapterRegistrySnapshot, StaticAdapterRegistry};
 use veil_adapter_xray::XrayDryRunBackend;
-use veil_diagnostics::{build_incident_report, build_support_bundle, IncidentReport, SupportBundle};
+use veil_diagnostics::{
+    build_incident_report, build_route_diagnostics, build_support_bundle, IncidentReport,
+    SupportBundle,
+};
 use veil_manifest::{demo_provider_manifest, validate_manifest, ProviderManifest};
-use veil_policy::{IncidentGuidance, RuntimeSupportAssessment};
-use veil_routing::{demo_runtime_state, select_best_route, RetryBudget, SelectionContext};
+use veil_policy::{
+    validate_route_selection_policy, IncidentGuidance, RouteSelectionPolicy,
+    RuntimeSupportAssessment,
+};
+use veil_routing::{
+    demo_runtime_state, select_best_route, RejectedRouteCandidate, RetryBudget, SelectionContext,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SessionPhase {
@@ -44,6 +52,8 @@ pub struct SessionPlan {
     pub selected_backend_name: Option<String>,
     pub diagnostics_reason: String,
     pub route_summary: String,
+    pub fallback_triggered: bool,
+    pub rejected_routes: Vec<RejectedRouteCandidate>,
     pub lifecycle: Vec<SessionEvent>,
     pub adapter_registry: AdapterRegistrySnapshot,
     pub incident_report: IncidentReport,
@@ -66,7 +76,22 @@ pub fn build_dry_run_plan(
     runtime_support: RuntimeSupportAssessment,
     guidance: IncidentGuidance,
 ) -> SessionPlan {
+    build_dry_run_plan_with_policy(
+        manifest,
+        runtime_support,
+        guidance,
+        RouteSelectionPolicy::default(),
+    )
+}
+
+pub fn build_dry_run_plan_with_policy(
+    manifest: &ProviderManifest,
+    runtime_support: RuntimeSupportAssessment,
+    guidance: IncidentGuidance,
+    route_policy: RouteSelectionPolicy,
+) -> SessionPlan {
     let manifest_is_valid = validate_manifest(manifest).is_ok();
+    let policy_is_valid = validate_route_selection_policy(&route_policy).is_ok();
     let session_id = Uuid::new_v4();
     let adapter_context = AdapterContext {
         client_platform: "linux".to_string(),
@@ -86,9 +111,10 @@ pub fn build_dry_run_plan(
             client_platform: "linux".to_string(),
             last_known_good_endpoint_id: None,
             retry_budget: RetryBudget {
-                max_candidates: usize::from(manifest.transport_policy.retry_budget),
+                max_candidates: usize::from(route_policy.retry_budget.max_candidates),
             },
             runtime_state: demo_runtime_state(),
+            policy: route_policy.clone(),
         },
     );
     lifecycle.push(SessionEvent {
@@ -111,13 +137,21 @@ pub fn build_dry_run_plan(
         let _ = &adapter_context;
     }
     let diagnostics_reason = format!(
-        "manifest_valid={} runtime_support={} guidance={}",
-        manifest_is_valid, runtime_support.tier, guidance.recommended_action
+        "manifest_valid={} policy_valid={} runtime_support={} guidance={}",
+        manifest_is_valid, policy_is_valid, runtime_support.tier, guidance.recommended_action
     );
     let route_summary = route_selection
         .as_ref()
         .map(|selection| selection.summary())
-        .unwrap_or_else(|| "no candidate route available".to_string());
+        .unwrap_or_else(|error| format!("route-selection-failed: {}", error.detail));
+    let fallback_triggered = route_selection
+        .as_ref()
+        .map(|selection| selection.fallback_triggered)
+        .unwrap_or(false);
+    let rejected_routes = match &route_selection {
+        Ok(selection) => selection.rejected.clone(),
+        Err(error) => error.rejected.clone(),
+    };
     let phase = if selected_endpoint_id.is_some() {
         SessionPhase::Selecting
     } else {
@@ -145,12 +179,19 @@ pub fn build_dry_run_plan(
         selected_endpoint_id.clone(),
         route_summary.clone(),
     );
+    let route_diagnostics = build_route_diagnostics(
+        selected_endpoint_id.clone(),
+        selected_backend_name.clone(),
+        route_summary.clone(),
+        fallback_triggered,
+        rejected_routes.clone(),
+    );
     let support_bundle = build_support_bundle(
         manifest_is_valid,
         manifest,
         runtime_support,
-        selected_endpoint_id.clone(),
-        route_summary.clone(),
+        route_diagnostics,
+        &route_policy,
         incident_report.clone(),
     );
 
@@ -163,6 +204,8 @@ pub fn build_dry_run_plan(
         selected_backend_name,
         diagnostics_reason,
         route_summary,
+        fallback_triggered,
+        rejected_routes,
         lifecycle,
         adapter_registry,
         incident_report,
@@ -202,9 +245,23 @@ mod tests {
         assert_eq!(plan.selected_endpoint_id.as_deref(), Some("edge-1"));
         assert_eq!(plan.selected_backend_name.as_deref(), Some("xray-core"));
         assert!(plan.diagnostics_reason.contains("manifest_valid=true"));
+        assert!(plan.diagnostics_reason.contains("policy_valid=true"));
         assert!(plan.route_summary.contains("selected=edge-1"));
+        assert!(!plan.fallback_triggered);
+        assert!(plan.rejected_routes.is_empty());
         assert_eq!(plan.incident_report.severity, "ok");
         assert_eq!(plan.support_bundle.selected_endpoint_id.as_deref(), Some("edge-1"));
+        assert_eq!(
+            plan.support_bundle
+                .route_diagnostics
+                .selected_backend_name
+                .as_deref(),
+            Some("xray-core")
+        );
+        assert_eq!(
+            plan.support_bundle.redacted_policy_diagnostics.retry_budget_max_candidates,
+            2
+        );
         assert_eq!(plan.lifecycle.len(), 4);
         assert_eq!(plan.adapter_registry.entries.len(), 1);
     }
@@ -224,5 +281,37 @@ mod tests {
         assert_eq!(report.selected_backend_name.as_deref(), Some("xray-core"));
         assert_eq!(report.incident_severity, "ok");
         assert_eq!(report.event_count, 4);
+    }
+
+    #[test]
+    fn dry_run_plan_exposes_rejected_routes_for_policy_failure() {
+        let manifest: ProviderManifest = demo_provider_manifest();
+        let mut policy = RouteSelectionPolicy::default();
+        policy.backends.deny = vec!["xray-core".to_string()];
+
+        let plan = build_dry_run_plan_with_policy(
+            &manifest,
+            RuntimeSupportAssessment::mvp_supported(),
+            IncidentGuidance::default(),
+            policy,
+        );
+
+        assert_eq!(plan.outcome, SessionOutcome::Planned);
+        assert!(plan.selected_endpoint_id.is_none());
+        assert_eq!(plan.rejected_routes.len(), 1);
+        assert_eq!(plan.support_bundle.route_diagnostics.rejected_routes.len(), 1);
+        assert_eq!(
+            plan.support_bundle
+                .redacted_policy_diagnostics
+                .denied_backends
+                .values,
+            vec!["xray-core"]
+        );
+        assert!(
+            plan.rejected_routes[0]
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("denylisted"))
+        );
     }
 }

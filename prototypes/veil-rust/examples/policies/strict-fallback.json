@@ -1,0 +1,9 @@
+{
+  "fallback": "strict",
+  "cooldown": {
+    "forbid_active_cooldown": true
+  },
+  "retry_budget": {
+    "max_candidates": 1
+  }
+}
