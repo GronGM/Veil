@@ -1,0 +1,12 @@
+[package]
+name = "veil-adapter-xray"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+serde_json.workspace = true
+veil-adapter-api = { path = "../veil-adapter-api" }
+veil-manifest = { path = "../veil-manifest" }
+

@@ -1,0 +1,13 @@
+[package]
+name = "veil-cli"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+clap.workspace = true
+serde_json.workspace = true
+time.workspace = true
+veil-core = { path = "../veil-core" }
+veil-manifest = { path = "../veil-manifest" }
+veil-policy = { path = "../veil-policy" }

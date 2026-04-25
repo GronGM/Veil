@@ -1,0 +1,17 @@
+[package]
+name = "veil-core"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+serde.workspace = true
+time.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+veil-adapter-api = { path = "../veil-adapter-api" }
+veil-adapter-xray = { path = "../veil-adapter-xray" }
+veil-diagnostics = { path = "../veil-diagnostics" }
+veil-manifest = { path = "../veil-manifest" }
+veil-policy = { path = "../veil-policy" }
+veil-routing = { path = "../veil-routing" }

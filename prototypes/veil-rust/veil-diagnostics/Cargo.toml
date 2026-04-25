@@ -1,0 +1,11 @@
+[package]
+name = "veil-diagnostics"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+serde.workspace = true
+veil-manifest = { path = "../veil-manifest" }
+veil-policy = { path = "../veil-policy" }
+

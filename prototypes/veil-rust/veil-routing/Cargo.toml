@@ -1,0 +1,10 @@
+[package]
+name = "veil-routing"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+serde.workspace = true
+veil-manifest = { path = "../veil-manifest" }
+
