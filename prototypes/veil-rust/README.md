@@ -59,10 +59,10 @@ This is meant to prove crate wiring and ownership boundaries before broader beha
 
 ## Validation
 
-Once a Rust toolchain is available, validate the workspace with:
+GitHub Actions now validates this workspace automatically with:
 
 ```bash
-cargo fmt --all
+cargo fmt --all --check
 cargo check --workspace
 cargo test --workspace
 ```
