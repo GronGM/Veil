@@ -91,6 +91,13 @@ Veil is still early in its public repository shape.
 
 This repository is intended to become the home for the project's architecture, prototype implementation, and phased development work. At this stage, the most important thing is making the project direction legible: what we are building, why it matters, and what a realistic destination looks like.
 
+## Repository Layout
+
+- `README.md` - project overview and goals
+- `docs/veil-architecture-rfc.md` - initial architecture direction
+- `docs/veil-phase-map.md` - public phase map and delivery shape
+- `prototypes/README.md` - expectations for future prototype work
+
 ## Bottom Line
 
 Veil is a control-plane-first effort to build a modular, explainable, supportable VPN/proxy orchestration platform.
