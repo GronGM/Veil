@@ -8,13 +8,14 @@ It explains how the project should move from a clear idea into a reviewable impl
 
 ## Current Public Reading
 
-The public `main` branch is still in the early project-structuring stage.
+The public `main` branch is still in the early project-structuring stage, but it now includes the first public Rust workspace skeleton.
 
 That means:
 
 - the README explains the project direction
 - the architecture RFC defines the intended shape
-- the repository is not yet claiming a completed prototype on this branch
+- the repository now includes `prototypes/veil-rust/` as an initial implementation scaffold
+- the branch is still not claiming a completed prototype
 
 ## Phase 0: Public Framing And Repository Grounding
 
@@ -67,6 +68,10 @@ Exit criteria:
 - the workspace structure is reviewable
 - module names match the architecture docs closely enough to understand the plan
 - limitations are documented honestly
+
+Current public state:
+
+- started through `prototypes/veil-rust/`
 
 ## Phase 3: Adapter And Control-Plane Contracts
 
