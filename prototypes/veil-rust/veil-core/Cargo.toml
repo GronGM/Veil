@@ -3,3 +3,6 @@ name = "veil-core"
 edition.workspace = true
 license.workspace = true
 version.workspace = true
+
+[dependencies]
+veil-adapter-api = { path = "../veil-adapter-api" }
