@@ -221,7 +221,7 @@ Reference mapping from GMvpn:
 - Public Interfaces: command-line commands, dry-run/reporting output, backend preflight export, local validation subcommands.
 - Dependencies: every core module, but no backend-specific logic beyond adapter selection.
 - Hot-swappable Parts: output formatters and command surface can evolve independently of control-plane logic.
-- MVP Scope: dry-run and report-focused local CLI with safe redacted output by default, file-based policy overrides, backend/endpoint selection overrides, backend preflight visibility, standalone redacted preflight export, and explicit opt-in raw JSON output for deeper debugging.
+- MVP Scope: dry-run and report-focused local CLI with safe redacted output by default, file-based policy overrides, backend/endpoint selection overrides, controlled registry-disable overrides for mismatch testing, backend preflight visibility, standalone redacted preflight export, and explicit opt-in raw JSON output for deeper debugging.
 - v1 Scope: subcommand-oriented UX and richer diagnostics commands.
 - v2/Research Scope: local API server or GUI integration shell.
 - Failure Modes: CLI output drifting from support bundle, contract mismatch hidden by permissive flags, local override precedence confusion.

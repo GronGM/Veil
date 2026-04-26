@@ -76,6 +76,7 @@ pub struct SessionReport {
 pub struct DryRunOverrides {
     pub selected_endpoint_id: Option<String>,
     pub selected_backend_name: Option<String>,
+    pub disabled_registered_backends: Vec<String>,
 }
 
 pub fn build_dry_run_plan(
@@ -123,8 +124,20 @@ pub fn build_dry_run_plan_with_policy_and_overrides(
         session_id: session_id.to_string(),
     };
     let mut registry = StaticAdapterRegistry::new();
-    registry.register(Box::new(MockDryRunBackend));
-    registry.register(Box::new(XrayDryRunBackend));
+    if !overrides
+        .disabled_registered_backends
+        .iter()
+        .any(|backend| backend == "mock-backend")
+    {
+        registry.register(Box::new(MockDryRunBackend));
+    }
+    if !overrides
+        .disabled_registered_backends
+        .iter()
+        .any(|backend| backend == "xray-core")
+    {
+        registry.register(Box::new(XrayDryRunBackend));
+    }
     let adapter_registry = registry.metadata_snapshot();
     let mut lifecycle = vec![SessionEvent {
         phase: SessionPhase::Loading,
@@ -140,6 +153,15 @@ pub fn build_dry_run_plan_with_policy_and_overrides(
         lifecycle.push(SessionEvent {
             phase: SessionPhase::Loading,
             detail: format!("applied backend override for '{backend_name}'"),
+        });
+    }
+    if !overrides.disabled_registered_backends.is_empty() {
+        lifecycle.push(SessionEvent {
+            phase: SessionPhase::Loading,
+            detail: format!(
+                "disabled registered backends: {}",
+                overrides.disabled_registered_backends.join(",")
+            ),
         });
     }
     let route_selection = select_best_route(
@@ -201,7 +223,7 @@ pub fn build_dry_run_plan_with_policy_and_overrides(
             .map(|preflight| preflight.ready_for_dry_run_connect)
             .unwrap_or(false);
     let diagnostics_reason = format!(
-        "manifest_valid={} policy_valid={} backend_preflight_ready={} endpoint_override={} backend_override={} runtime_support={} guidance={}",
+        "manifest_valid={} policy_valid={} backend_preflight_ready={} endpoint_override={} backend_override={} disabled_registered_backends={} runtime_support={} guidance={}",
         manifest_is_valid,
         policy_is_valid,
         backend_preflight_ready,
@@ -213,6 +235,11 @@ pub fn build_dry_run_plan_with_policy_and_overrides(
             .selected_backend_name
             .clone()
             .unwrap_or_else(|| "none".to_string()),
+        if overrides.disabled_registered_backends.is_empty() {
+            "none".to_string()
+        } else {
+            overrides.disabled_registered_backends.join(",")
+        },
         runtime_support.tier,
         guidance.recommended_action
     );
@@ -372,6 +399,7 @@ mod tests {
         assert!(plan.diagnostics_reason.contains("backend_preflight_ready=true"));
         assert!(plan.diagnostics_reason.contains("endpoint_override=none"));
         assert!(plan.diagnostics_reason.contains("backend_override=none"));
+        assert!(plan.diagnostics_reason.contains("disabled_registered_backends=none"));
         assert!(plan.route_summary.contains("selected=edge-1"));
         assert!(!plan.fallback_triggered);
         assert!(plan.rejected_routes.is_empty());
@@ -514,5 +542,34 @@ mod tests {
         assert_eq!(plan.selected_endpoint_id.as_deref(), Some("edge-mock-1"));
         assert_eq!(plan.selected_backend_name.as_deref(), Some("mock-backend"));
         assert!(plan.diagnostics_reason.contains("endpoint_override=edge-mock-1"));
+    }
+
+    #[test]
+    fn dry_run_plan_can_disable_registered_backend_for_mismatch_testing() {
+        let manifest: ProviderManifest = demo_provider_manifest();
+
+        let plan = build_dry_run_plan_with_policy_and_overrides(
+            &manifest,
+            RuntimeSupportAssessment::mvp_supported(),
+            IncidentGuidance::default(),
+            RouteSelectionPolicy::default(),
+            DryRunOverrides {
+                selected_endpoint_id: None,
+                selected_backend_name: Some("xray-core".to_string()),
+                disabled_registered_backends: vec!["xray-core".to_string()],
+            },
+        );
+
+        assert_eq!(plan.outcome, SessionOutcome::Planned);
+        assert!(plan.selected_endpoint_id.is_none());
+        assert!(plan
+            .diagnostics_reason
+            .contains("disabled_registered_backends=xray-core"));
+        assert!(
+            plan.support_bundle
+                .adapter_compatibility_diagnostics
+                .missing_backends
+                .contains(&"xray-core".to_string())
+        );
     }
 }

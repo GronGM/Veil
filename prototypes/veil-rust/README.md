@@ -48,6 +48,7 @@ Recent prototype slice:
 - adapter registry snapshots now include operator-facing capabilities so CLI output can show which backends support preflight, health checks, reload, typed config rendering, and dry-run-only execution
 - support bundles now include adapter compatibility diagnostics that compare manifest-advertised backends with the locally registered adapter set
 - `veil-cli demo` now supports explicit backend and endpoint selection overrides so dry-run can reproduce `xray-core`, `mock-backend`, or mismatch paths on demand
+- `veil-cli demo --disable-registered-backend <name>` now lets dry-run intentionally hide a local adapter registration so compatibility mismatch paths can be reproduced without code edits
 
 Example policy files:
 
@@ -66,6 +67,7 @@ cargo run -p veil-cli -- demo --policy-file examples/policies/prefer-eu-stable.j
 cargo run -p veil-cli -- demo --export-redacted-preflight output/demo-redacted-preflight.json
 cargo run -p veil-cli -- demo --select-backend mock-backend
 cargo run -p veil-cli -- demo --select-endpoint edge-1
+cargo run -p veil-cli -- demo --select-backend xray-core --disable-registered-backend xray-core
 ```
 
 Validation commands once Rust toolchain is available:

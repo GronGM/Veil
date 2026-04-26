@@ -43,6 +43,8 @@ struct DemoArgs {
     selected_endpoint_id: Option<String>,
     #[arg(long = "select-backend")]
     selected_backend_name: Option<String>,
+    #[arg(long = "disable-registered-backend")]
+    disabled_registered_backends: Vec<String>,
     #[arg(long = "allow-backend")]
     allow_backends: Vec<String>,
     #[arg(long = "deny-backend")]
@@ -166,6 +168,7 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
     let summary = build_compact_diagnostics_summary(
         &plan.support_bundle.redacted_manifest_diagnostics,
         &plan.adapter_registry,
+        &summarize_applied_overrides(&build_dry_run_overrides(&args)),
         &plan.support_bundle.adapter_compatibility_diagnostics.summary,
         plan.support_bundle
             .redacted_backend_preflight_diagnostics
@@ -275,6 +278,7 @@ fn build_dry_run_overrides(args: &DemoArgs) -> DryRunOverrides {
     DryRunOverrides {
         selected_endpoint_id: args.selected_endpoint_id.clone(),
         selected_backend_name: args.selected_backend_name.clone(),
+        disabled_registered_backends: args.disabled_registered_backends.clone(),
     }
 }
 
@@ -338,6 +342,7 @@ fn export_redacted_preflight(
 fn build_compact_diagnostics_summary(
     manifest: &RedactedManifestDiagnostics,
     adapter_registry: &AdapterRegistrySnapshot,
+    applied_overrides_summary: &str,
     adapter_compatibility_summary: &str,
     backend_preflight: Option<&RedactedBackendPreflightDiagnostics>,
     route: &RedactedRouteDiagnostics,
@@ -376,6 +381,7 @@ fn build_compact_diagnostics_summary(
             "manifest: schema v{}, endpoints {}, profile {:?}",
             manifest.metadata.schema_version, manifest.endpoint_count, manifest.profile_kind
         ),
+        format!("applied overrides: {applied_overrides_summary}"),
         format!("registered backends: {adapter_summary}"),
         format!(
             "adapter compatibility: {}",
@@ -394,6 +400,27 @@ fn build_compact_diagnostics_summary(
         format!("rejected routes: {rejected_summary}"),
     ]
     .join("\n")
+}
+
+fn summarize_applied_overrides(overrides: &DryRunOverrides) -> String {
+    let endpoint = overrides
+        .selected_endpoint_id
+        .clone()
+        .unwrap_or_else(|| "none".to_string());
+    let backend = overrides
+        .selected_backend_name
+        .clone()
+        .unwrap_or_else(|| "none".to_string());
+    let disabled = if overrides.disabled_registered_backends.is_empty() {
+        "none".to_string()
+    } else {
+        overrides.disabled_registered_backends.join(",")
+    };
+
+    format!(
+        "endpoint={} backend={} disabled_registered_backends={}",
+        endpoint, backend, disabled
+    )
 }
 
 fn summarize_adapter_registry(snapshot: &AdapterRegistrySnapshot) -> String {
@@ -684,6 +711,7 @@ mod tests {
         let args = DemoArgs {
             selected_endpoint_id: Some("edge-mock-1".to_string()),
             selected_backend_name: Some("mock-backend".to_string()),
+            disabled_registered_backends: vec!["xray-core".to_string()],
             ..DemoArgs::default()
         };
 
@@ -691,6 +719,7 @@ mod tests {
 
         assert_eq!(overrides.selected_endpoint_id.as_deref(), Some("edge-mock-1"));
         assert_eq!(overrides.selected_backend_name.as_deref(), Some("mock-backend"));
+        assert_eq!(overrides.disabled_registered_backends, vec!["xray-core"]);
     }
 
     #[test]
@@ -948,6 +977,7 @@ mod tests {
             build_compact_diagnostics_summary(
                 &manifest,
                 &adapter_registry,
+                "endpoint=edge-1 backend=xray-core disabled_registered_backends=none",
                 "manifest and adapter registry align for advertised backends: mock-backend, xray-core",
                 Some(&backend_preflight),
                 &route,
@@ -955,6 +985,7 @@ mod tests {
             );
 
         assert!(summary.contains("manifest: schema v1, endpoints 1"));
+        assert!(summary.contains("applied overrides: endpoint=edge-1 backend=xray-core"));
         assert!(summary.contains("registered backends:"));
         assert!(summary.contains("adapter compatibility: manifest and adapter registry align"));
         assert!(summary.contains("mock-backend[preflight=true,health=true,reload=false"));
@@ -1036,5 +1067,18 @@ mod tests {
         assert!(summary.contains("preflight=true"));
         assert!(summary.contains("reload=false"));
         assert!(summary.contains("typed_config=true"));
+    }
+
+    #[test]
+    fn applied_overrides_summary_mentions_disabled_registry_entries() {
+        let summary = summarize_applied_overrides(&DryRunOverrides {
+            selected_endpoint_id: Some("edge-mock-1".to_string()),
+            selected_backend_name: Some("mock-backend".to_string()),
+            disabled_registered_backends: vec!["xray-core".to_string()],
+        });
+
+        assert!(summary.contains("endpoint=edge-mock-1"));
+        assert!(summary.contains("backend=mock-backend"));
+        assert!(summary.contains("disabled_registered_backends=xray-core"));
     }
 }
