@@ -58,3 +58,29 @@ impl RoutePolicy {
         PolicyDecision { allowed, summary }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn demo_policy_allows_xray_backend() {
+        let manifest = ProviderManifest::demo();
+        let policy = RoutePolicy::demo();
+        let decision = policy.evaluate(&manifest, "xray-core");
+
+        assert!(decision.allowed);
+        assert!(decision.summary.contains("policy allows backend 'xray-core'"));
+    }
+
+    #[test]
+    fn mismatch_policy_blocks_xray_backend() {
+        let manifest = ProviderManifest::demo();
+        let policy = RoutePolicy::mismatch_demo();
+        let decision = policy.evaluate(&manifest, "xray-core");
+
+        assert!(!decision.allowed);
+        assert!(decision.summary.contains("policy blocks backend 'xray-core'"));
+        assert!(decision.summary.contains("only 'mock-backend' is allowed"));
+    }
+}
