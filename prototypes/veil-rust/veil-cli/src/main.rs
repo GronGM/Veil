@@ -1,5 +1,11 @@
 #![forbid(unsafe_code)]
 
+use veil_adapter_xray::XrayBackend;
+use veil_core::SessionEngine;
+
 fn main() {
-    println!("veil-cli skeleton: implementation will land in future reviewable slices");
+    let backend = XrayBackend::default();
+    let report = SessionEngine::dry_run(&backend);
+
+    println!("{}", report.render());
 }
