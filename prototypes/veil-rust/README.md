@@ -13,10 +13,11 @@ It now provides:
 - a Cargo workspace root
 - initial crate boundaries that match the public architecture docs
 - minimal placeholder types and entrypoints
-- an initial end-to-end dry-run path from `veil-cli` through `veil-core` into `veil-adapter-xray`
+- an initial end-to-end dry-run path from `veil-cli` through `veil-core` into backend adapters
 - typed manifest input and a first policy-aware decision summary in the dry-run report
 - a redacted diagnostics view produced by `veil-diagnostics`
-- a simple `policy-mismatch` CLI scenario for a blocked backend decision
+- a structured JSON-like diagnostics artifact for machine-readable inspection
+- simple `policy-mismatch` and `mock-backend` CLI scenarios
 
 It does not yet claim:
 
@@ -31,6 +32,7 @@ It does not yet claim:
 - `veil-core`
 - `veil-adapter-api`
 - `veil-adapter-xray`
+- `veil-adapter-mock`
 - `veil-manifest`
 - `veil-policy`
 - `veil-routing`
@@ -44,10 +46,10 @@ The current public dry-run slice is intentionally simple:
 - `veil-manifest` provides a typed demo manifest input
 - `veil-policy` evaluates a minimal backend allow rule and a `policy-mismatch` scenario
 - `veil-adapter-api` defines a minimal `DryRunPlan`
-- `veil-adapter-xray` returns a placeholder Xray dry-run plan
+- `veil-adapter-xray` and `veil-adapter-mock` provide two backend choices
 - `veil-core` turns those inputs into a control-plane `DryRunReport`
-- `veil-diagnostics` builds a redacted support-facing view
-- `veil-cli` prints both the control-plane report and the redacted diagnostics block
+- `veil-diagnostics` builds a redacted support-facing view and a JSON-like artifact
+- `veil-cli` prints the control-plane report, the redacted diagnostics block, and the structured artifact
 
 This is meant to prove crate wiring and ownership boundaries before broader behavior lands.
 
@@ -66,8 +68,9 @@ cargo test --workspace
 ```bash
 cargo run -p veil-cli
 cargo run -p veil-cli -- policy-mismatch
+cargo run -p veil-cli -- mock-backend
 ```
 
 ## Next Steps
 
-The next reviewable slices should add richer manifest fields, explicit diagnostics structures, and non-Xray adapter scenarios without landing a broad rewrite in one jump.
+The next reviewable slices should add richer manifest fields, explicit diagnostics structures, and adapter capability reporting without landing a broad rewrite in one jump.
