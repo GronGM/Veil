@@ -3,6 +3,7 @@ use serde::Deserialize;
 use serde_json::to_string_pretty;
 use std::fs;
 use std::path::{Path, PathBuf};
+use veil_adapter_api::AdapterRegistrySnapshot;
 use veil_core::{build_dry_run_plan_with_policy, build_session_report};
 use veil_diagnostics::{
     build_redacted_support_bundle, RedactedBackendPreflightDiagnostics,
@@ -159,6 +160,7 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
     let redacted_bundle = build_redacted_support_bundle(&plan.support_bundle);
     let summary = build_compact_diagnostics_summary(
         &plan.support_bundle.redacted_manifest_diagnostics,
+        &plan.adapter_registry,
         plan.support_bundle
             .redacted_backend_preflight_diagnostics
             .as_ref(),
@@ -197,6 +199,10 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
     println!("incident_headline={}", plan.incident_report.headline);
     println!("session_event_count={}", report.event_count);
     println!("adapter_registry_entries={}", plan.adapter_registry.entries.len());
+    println!(
+        "adapter_registry_summary={}",
+        summarize_adapter_registry(&plan.adapter_registry)
+    );
     if let Some(path) = &args.export_redacted_bundle {
         export_redacted_bundle(path, &redacted_bundle)?;
         println!("redacted_bundle_exported_to={path}");
@@ -314,6 +320,7 @@ fn export_redacted_preflight(
 
 fn build_compact_diagnostics_summary(
     manifest: &RedactedManifestDiagnostics,
+    adapter_registry: &AdapterRegistrySnapshot,
     backend_preflight: Option<&RedactedBackendPreflightDiagnostics>,
     route: &RedactedRouteDiagnostics,
     policy: &RedactedPolicyDiagnostics,
@@ -344,12 +351,14 @@ fn build_compact_diagnostics_summary(
             )
         })
         .unwrap_or_else(|| "none".to_string());
+    let adapter_summary = summarize_adapter_registry(adapter_registry);
 
     [
         format!(
             "manifest: schema v{}, endpoints {}, profile {:?}",
             manifest.metadata.schema_version, manifest.endpoint_count, manifest.profile_kind
         ),
+        format!("registered backends: {adapter_summary}"),
         format!("backend preflight: {backend_preflight_summary}"),
         format!("selected endpoint: {selected_endpoint}"),
         format!("selected backend: {selected_backend}"),
@@ -363,6 +372,29 @@ fn build_compact_diagnostics_summary(
         format!("rejected routes: {rejected_summary}"),
     ]
     .join("\n")
+}
+
+fn summarize_adapter_registry(snapshot: &AdapterRegistrySnapshot) -> String {
+    if snapshot.entries.is_empty() {
+        return "none".to_string();
+    }
+
+    snapshot
+        .entries
+        .iter()
+        .map(|entry| {
+            format!(
+                "{}[preflight={},health={},reload={},typed_config={},dry_run_only={}]",
+                entry.metadata.backend_name,
+                entry.capabilities.supports_dry_run_preflight,
+                entry.capabilities.supports_health_check,
+                entry.capabilities.supports_reload,
+                entry.capabilities.renders_typed_config,
+                entry.capabilities.dry_run_only
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn summarize_rejected_routes(rejected_routes: &[RedactedRejectedRoute]) -> String {
@@ -520,6 +552,7 @@ mod tests {
         RedactedRouteDiagnostics, RedactedStringListPolicyField, RedactedSupportBundle,
     };
     use std::path::Path;
+    use veil_adapter_api::{AdapterCapabilities, AdapterMetadata, AdapterRegistryEntry, AdapterRegistrySnapshot};
 
     #[test]
     fn partial_policy_override_updates_selected_fields_only() {
@@ -809,6 +842,42 @@ mod tests {
             known_good_enabled: true,
             known_good_bonus_points: 3,
         };
+        let adapter_registry = AdapterRegistrySnapshot {
+            entries: vec![
+                AdapterRegistryEntry {
+                    metadata: AdapterMetadata {
+                        backend_name: "mock-backend".to_string(),
+                        display_name: "Mock Dry Run Backend".to_string(),
+                        version: "0.1.0".to_string(),
+                        supports_reload: false,
+                        dry_run_only: true,
+                    },
+                    capabilities: AdapterCapabilities {
+                        supports_dry_run_preflight: true,
+                        supports_health_check: true,
+                        supports_reload: false,
+                        dry_run_only: true,
+                        renders_typed_config: true,
+                    },
+                },
+                AdapterRegistryEntry {
+                    metadata: AdapterMetadata {
+                        backend_name: "xray-core".to_string(),
+                        display_name: "Xray Dry Run Backend".to_string(),
+                        version: "0.1.0".to_string(),
+                        supports_reload: true,
+                        dry_run_only: true,
+                    },
+                    capabilities: AdapterCapabilities {
+                        supports_dry_run_preflight: true,
+                        supports_health_check: true,
+                        supports_reload: true,
+                        dry_run_only: true,
+                        renders_typed_config: true,
+                    },
+                },
+            ],
+        };
         let backend_preflight = RedactedBackendPreflightDiagnostics {
             backend_name: "xray-core".to_string(),
             ready_for_dry_run_connect: true,
@@ -830,9 +899,17 @@ mod tests {
         };
 
         let summary =
-            build_compact_diagnostics_summary(&manifest, Some(&backend_preflight), &route, &policy);
+            build_compact_diagnostics_summary(
+                &manifest,
+                &adapter_registry,
+                Some(&backend_preflight),
+                &route,
+                &policy,
+            );
 
         assert!(summary.contains("manifest: schema v1, endpoints 1"));
+        assert!(summary.contains("registered backends:"));
+        assert!(summary.contains("mock-backend[preflight=true,health=true,reload=false"));
         assert!(summary.contains("backend preflight: xray-core ready=true binary_present=false"));
         assert!(summary.contains("selected endpoint: edge-1"));
         assert!(summary.contains("selected backend: xray-core"));
@@ -884,5 +961,32 @@ mod tests {
 
         assert!(rejected.contains("edge-2"));
         assert!(rejected.contains("denylisted"));
+    }
+
+    #[test]
+    fn adapter_registry_summary_lists_capabilities() {
+        let summary = summarize_adapter_registry(&AdapterRegistrySnapshot {
+            entries: vec![AdapterRegistryEntry {
+                metadata: AdapterMetadata {
+                    backend_name: "mock-backend".to_string(),
+                    display_name: "Mock Dry Run Backend".to_string(),
+                    version: "0.1.0".to_string(),
+                    supports_reload: false,
+                    dry_run_only: true,
+                },
+                capabilities: AdapterCapabilities {
+                    supports_dry_run_preflight: true,
+                    supports_health_check: true,
+                    supports_reload: false,
+                    dry_run_only: true,
+                    renders_typed_config: true,
+                },
+            }],
+        });
+
+        assert!(summary.contains("mock-backend"));
+        assert!(summary.contains("preflight=true"));
+        assert!(summary.contains("reload=false"));
+        assert!(summary.contains("typed_config=true"));
     }
 }

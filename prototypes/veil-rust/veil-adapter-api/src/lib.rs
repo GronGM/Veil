@@ -32,11 +32,21 @@ pub struct AdapterContext {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AdapterRegistryEntry {
     pub metadata: AdapterMetadata,
+    pub capabilities: AdapterCapabilities,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct AdapterRegistrySnapshot {
     pub entries: Vec<AdapterRegistryEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdapterCapabilities {
+    pub supports_dry_run_preflight: bool,
+    pub supports_health_check: bool,
+    pub supports_reload: bool,
+    pub dry_run_only: bool,
+    pub renders_typed_config: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,6 +98,16 @@ pub enum AdapterError {
 pub trait DataplaneBackend: Send + Sync {
     fn metadata(&self) -> AdapterMetadata;
     fn backend_name(&self) -> &'static str;
+    fn capabilities(&self) -> AdapterCapabilities {
+        let metadata = self.metadata();
+        AdapterCapabilities {
+            supports_dry_run_preflight: true,
+            supports_health_check: true,
+            supports_reload: metadata.supports_reload,
+            dry_run_only: metadata.dry_run_only,
+            renders_typed_config: true,
+        }
+    }
     fn init(&self, endpoint: &Endpoint, context: &AdapterContext) -> Result<(), AdapterError>;
     fn build_dry_run_preflight(
         &self,
@@ -134,6 +154,7 @@ impl StaticAdapterRegistry {
             .values()
             .map(|backend| AdapterRegistryEntry {
                 metadata: backend.metadata(),
+                capabilities: backend.capabilities(),
             })
             .collect::<Vec<_>>();
         entries.sort_by(|left, right| left.metadata.backend_name.cmp(&right.metadata.backend_name));
@@ -320,5 +341,20 @@ mod tests {
         assert_eq!(backend.backend_name(), "mock-backend");
         assert_eq!(preflight.backend_name, "mock-backend");
         assert_eq!(preflight.rendered_config["kind"], "mock");
+    }
+
+    #[test]
+    fn registry_snapshot_exposes_capabilities() {
+        let mut registry = StaticAdapterRegistry::new();
+        registry.register(Box::new(MockBackend));
+
+        let snapshot = registry.metadata_snapshot();
+
+        assert_eq!(snapshot.entries.len(), 1);
+        assert!(snapshot.entries[0].capabilities.supports_dry_run_preflight);
+        assert!(snapshot.entries[0].capabilities.supports_health_check);
+        assert!(snapshot.entries[0].capabilities.renders_typed_config);
+        assert!(snapshot.entries[0].capabilities.dry_run_only);
+        assert!(!snapshot.entries[0].capabilities.supports_reload);
     }
 }

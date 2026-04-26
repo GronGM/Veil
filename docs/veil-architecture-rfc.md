@@ -176,10 +176,10 @@ Reference mapping from GMvpn:
 - Responsibility: define the in-process trait boundary between control plane and dataplane/transport/platform adapters.
 - Inputs: normalized endpoint config, generated runtime config, runtime context, lifecycle commands from `veil-core`.
 - Outputs: adapter status, health reports, runtime snapshots, start/stop/reload results.
-- Public Interfaces: `DataplaneBackend`, `TransportAdapter`, `EndpointProvider`, `HealthProbe`, `PolicyEvaluator`.
+- Public Interfaces: `DataplaneBackend`, `TransportAdapter`, `EndpointProvider`, `HealthProbe`, `PolicyEvaluator`, `AdapterCapabilities`, `AdapterRegistrySnapshot`.
 - Dependencies: shared model types only; no direct dependency on a concrete backend.
 - Hot-swappable Parts: all backend and transport implementations.
-- MVP Scope: static registration, lifecycle methods `init`, `build_dry_run_preflight`, `apply_config`, `start`, `health_check`, `reload`, `stop`, `runtime_snapshot`.
+- MVP Scope: static registration, lifecycle methods `init`, `build_dry_run_preflight`, `apply_config`, `start`, `health_check`, `reload`, `stop`, `runtime_snapshot`, and operator-facing capability snapshots for registered adapters.
 - v1 Scope: version compatibility metadata and stronger capability negotiation.
 - v2/Research Scope: sandboxed or separately isolated plugin processes.
 - Failure Modes: partially applied config, health-check contract mismatch, adapter reporting incomplete runtime state.
