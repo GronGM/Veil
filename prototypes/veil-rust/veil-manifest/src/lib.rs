@@ -188,7 +188,10 @@ mod tests {
         assert_eq!(manifest.client_platform.as_str(), "linux");
         assert_eq!(manifest.platform_adapter.as_str(), "linux");
         assert_eq!(manifest.platform_capability.status.as_str(), "mvp-supported");
-        assert_eq!(manifest.platform_capability.supported_backends, vec!["xray-core".to_string()]);
+        assert_eq!(
+            manifest.platform_capability.supported_backends,
+            vec!["xray-core".to_string()]
+        );
     }
 
     #[test]
@@ -206,6 +209,9 @@ mod tests {
 
         assert_eq!(manifest.client_platform.as_str(), "linux");
         assert_eq!(manifest.preferred_backend, "mock-backend");
-        assert_eq!(manifest.platform_capability.supported_backends, vec!["mock-backend".to_string()]);
+        assert_eq!(
+            manifest.platform_capability.supported_backends,
+            vec!["mock-backend".to_string()]
+        );
     }
 }

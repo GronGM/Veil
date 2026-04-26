@@ -9,14 +9,17 @@ use veil_adapter_api::{
 use veil_diagnostics::RedactedDryRunDiagnostics;
 use veil_dry_run::{DryRunOutcome, DryRunReport};
 use veil_manifest::ProviderManifest;
-use veil_policy::{PolicyDecision, RoutePolicy, RuntimeSupportAssessment, TransportPolicyDecision};
+use veil_policy::{
+    PolicyDecision, RoutePolicy, RuntimeSupportAssessment, TransportPolicyDecision,
+};
 
 /// Minimal session orchestration entrypoint for early dry-run wiring.
 #[derive(Debug, Clone, Default)]
 pub struct SessionEngine;
 
 impl SessionEngine {
-    /// Build a dry-run report from manifest, policy, and backend inputs without touching the real network.
+    /// Build a dry-run report from manifest, policy, and backend inputs
+    /// without touching the real network.
     pub fn dry_run<B: DataplaneBackend>(
         manifest: &ProviderManifest,
         policy: &RoutePolicy,
@@ -30,8 +33,7 @@ impl SessionEngine {
             validate_transport_support(&capabilities, transport_decision.transport_profile);
         let adapter_capability_decision =
             validate_capability_requirements(&capabilities, policy.required_capabilities);
-        let runtime_support_assessment =
-            policy.assess_runtime_support(manifest, plan.backend_name);
+        let runtime_support_assessment = policy.assess_runtime_support(manifest, plan.backend_name);
         Self::from_parts(
             manifest,
             plan,
@@ -147,7 +149,11 @@ mod tests {
         assert_eq!(report.runtime_support_reason.as_str(), "explicit_mvp_contour");
         assert!(report.transport_summary.contains("policy allows transport 'tls-tcp'"));
         assert!(report.adapter_transport_summary.contains("supports transport 'tls-tcp'"));
-        assert!(report.adapter_capability_summary.contains("satisfies the requested capability requirements"));
+        assert!(
+            report
+                .adapter_capability_summary
+                .contains("satisfies the requested capability requirements")
+        );
         assert!(report.runtime_support_summary.contains("honest MVP runtime target"));
         assert!(report.capabilities_summary.contains("typed_config=true"));
         assert!(report.capabilities_summary.contains("real_binary=true"));
@@ -180,7 +186,12 @@ mod tests {
         assert!(report.allowed);
         assert_eq!(report.runtime_support_tier.as_str(), "foundation-only");
         assert_eq!(report.runtime_support_reason.as_str(), "linux_non_mvp_contour");
-        assert!(report.runtime_support_caveats.iter().any(|caveat| caveat.contains("first MVP target")));
+        assert!(
+            report
+                .runtime_support_caveats
+                .iter()
+                .any(|caveat| caveat.contains("first MVP target"))
+        );
     }
 
     #[test]
@@ -236,6 +247,10 @@ mod tests {
         assert_eq!(report.adapter_transport_reason.as_str(), "supported");
         assert_eq!(report.adapter_capability_reason.as_str(), "missing_typed_config");
         assert_eq!(report.runtime_support_tier.as_str(), "contract-mismatch");
-        assert!(report.adapter_capability_summary.contains("capability requirement 'typed_config'"));
+        assert!(
+            report
+                .adapter_capability_summary
+                .contains("capability requirement 'typed_config'")
+        );
     }
 }

@@ -75,7 +75,32 @@ impl RedactedDryRunDiagnostics {
     /// Render a compact redacted diagnostics block for CLI output.
     pub fn render(&self) -> String {
         format!(
-            "Veil diagnostics\nprovider: {}\nprofile: {}\nbackend: {}\ntransport: {}\nclient_platform: {}\nplatform_adapter: {}\noutcome: {}\nallowed: {}\nbackend_reason: {}\ntransport_reason: {}\nadapter_transport_reason: {}\nadapter_capability_reason: {}\nruntime_support_tier: {}\nruntime_support_reason: {}\ndecision: {}\ntransport_decision: {}\nadapter_transport: {}\nadapter_capability: {}\nruntime_support: {}\nruntime_support_caveats: {}\nrouting: {}\nrouting_candidates: {}\ncapabilities: {}",
+            concat!(
+                "Veil diagnostics\n",
+                "provider: {}\n",
+                "profile: {}\n",
+                "backend: {}\n",
+                "transport: {}\n",
+                "client_platform: {}\n",
+                "platform_adapter: {}\n",
+                "outcome: {}\n",
+                "allowed: {}\n",
+                "backend_reason: {}\n",
+                "transport_reason: {}\n",
+                "adapter_transport_reason: {}\n",
+                "adapter_capability_reason: {}\n",
+                "runtime_support_tier: {}\n",
+                "runtime_support_reason: {}\n",
+                "decision: {}\n",
+                "transport_decision: {}\n",
+                "adapter_transport: {}\n",
+                "adapter_capability: {}\n",
+                "runtime_support: {}\n",
+                "runtime_support_caveats: {}\n",
+                "routing: {}\n",
+                "routing_candidates: {}\n",
+                "capabilities: {}"
+            ),
             self.provider_label,
             self.profile_label,
             self.backend_name,

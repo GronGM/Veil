@@ -5,9 +5,7 @@ use veil_adapter_xray::XrayBackend;
 use veil_core::SessionEngine;
 use veil_manifest::ProviderManifest;
 use veil_policy::RoutePolicy;
-use veil_routing::{
-    select_backend_with_eligibility, BackendCandidate, BackendEligibility,
-};
+use veil_routing::{select_backend_with_eligibility, BackendCandidate, BackendEligibility};
 use veil_transport::TransportProfile;
 
 fn main() {
@@ -94,7 +92,8 @@ fn main() {
         },
     ];
 
-    let routing_result = select_backend_with_eligibility(&candidates, &manifest, &policy, &eligibility);
+    let routing_result =
+        select_backend_with_eligibility(&candidates, &manifest, &policy, &eligibility);
 
     let selected_backend = forced_backend_name
         .or_else(|| routing_result.selection.as_ref().map(|selection| selection.backend_name))

@@ -3,7 +3,9 @@
 //! Policy skeleton for Veil.
 
 use veil_adapter_api::AdapterCapabilityRequirements;
-use veil_manifest::{ClientPlatform, PlatformAdapterKind, PlatformSupportStatus, ProviderManifest};
+use veil_manifest::{
+    ClientPlatform, PlatformAdapterKind, PlatformSupportStatus, ProviderManifest,
+};
 use veil_transport::TransportProfile;
 
 /// Minimal policy model for early dry-run wiring.
@@ -216,8 +218,14 @@ impl RoutePolicy {
             (
                 BackendPolicyReason::BlockedByAllowlist,
                 format!(
-                    "policy blocks backend '{}' for provider '{}' profile '{}' because only '{}' is allowed",
-                    backend_name, manifest.provider_name, manifest.profile_name, self.allow_backend
+                    concat!(
+                        "policy blocks backend '{}' for provider '{}' profile '{}' ",
+                        "because only '{}' is allowed"
+                    ),
+                    backend_name,
+                    manifest.provider_name,
+                    manifest.profile_name,
+                    self.allow_backend
                 ),
             )
         };
@@ -305,7 +313,11 @@ impl RoutePolicy {
             return RuntimeSupportAssessment {
                 tier: RuntimeSupportTier::DevelopmentOnly,
                 reason: RuntimeSupportReason::SimulatedContour,
-                summary: "simulated adapter is intended for modeling and dry-run validation rather than MVP runtime claims"
+                summary:
+                    concat!(
+                        "simulated adapter is intended for modeling and dry-run validation ",
+                        "rather than MVP runtime claims"
+                    )
                     .to_string(),
                 in_mvp_scope: false,
                 caveats,
@@ -318,8 +330,11 @@ impl RoutePolicy {
         {
             if capability.status != PlatformSupportStatus::MvpSupported {
                 caveats.push(
-                    "manifest platform capability does not mark the linux xray contour as mvp-supported"
-                        .to_string(),
+                    concat!(
+                        "manifest platform capability does not mark the linux xray contour ",
+                        "as mvp-supported"
+                    )
+                    .to_string(),
                 );
             }
 
@@ -327,8 +342,8 @@ impl RoutePolicy {
                 return RuntimeSupportAssessment {
                     tier: RuntimeSupportTier::MvpSupported,
                     reason: RuntimeSupportReason::ExplicitMvpContour,
-                    summary:
-                        "linux xray contour matches the current honest MVP runtime target".to_string(),
+                    summary: "linux xray contour matches the current honest MVP runtime target"
+                        .to_string(),
                     in_mvp_scope: true,
                     caveats,
                 };
@@ -337,7 +352,11 @@ impl RoutePolicy {
             return RuntimeSupportAssessment {
                 tier: RuntimeSupportTier::ContractMismatch,
                 reason: RuntimeSupportReason::ManifestContractMismatch,
-                summary: "selected linux xray contour matches the repository MVP target, but the manifest contract does not declare the same contour"
+                summary:
+                    concat!(
+                        "selected linux xray contour matches the repository MVP target, ",
+                        "but the manifest contract does not declare the same contour"
+                    )
                     .to_string(),
                 in_mvp_scope: false,
                 caveats,
@@ -352,8 +371,11 @@ impl RoutePolicy {
                     tier: RuntimeSupportTier::ContractMismatch,
                     reason: RuntimeSupportReason::ManifestContractMismatch,
                     summary:
-                        "selected linux contour does not match the manifest-declared support contract"
-                            .to_string(),
+                        concat!(
+                            "selected linux contour does not match the manifest-declared ",
+                            "support contract"
+                        )
+                        .to_string(),
                     in_mvp_scope: false,
                     caveats,
                 };
@@ -363,8 +385,11 @@ impl RoutePolicy {
                 tier: RuntimeSupportTier::FoundationOnly,
                 reason: RuntimeSupportReason::LinuxNonMvpContour,
                 summary:
-                    "linux remains the reference runtime, but this contour is outside the first MVP target"
-                        .to_string(),
+                    concat!(
+                        "linux remains the reference runtime, but this contour is outside ",
+                        "the first MVP target"
+                    )
+                    .to_string(),
                 in_mvp_scope: false,
                 caveats: vec![
                     "the first MVP target is the explicit linux + xray-core contour".to_string(),
@@ -396,8 +421,11 @@ impl RoutePolicy {
                     RuntimeSupportReason::ManifestContractMismatch
                 },
                 summary:
-                    "ios remains on a bridge-oriented contract path and is outside the first MVP runtime target"
-                        .to_string(),
+                    concat!(
+                        "ios remains on a bridge-oriented contract path and is outside ",
+                        "the first MVP runtime target"
+                    )
+                    .to_string(),
                 in_mvp_scope: false,
                 caveats,
             };
@@ -418,7 +446,11 @@ impl RoutePolicy {
                 } else {
                     RuntimeSupportReason::ManifestContractMismatch
                 },
-                summary: "this runtime contour follows the shared product model but remains outside the first hardened MVP target"
+                summary:
+                    concat!(
+                        "this runtime contour follows the shared product model but remains ",
+                        "outside the first hardened MVP target"
+                    )
                     .to_string(),
                 in_mvp_scope: false,
                 caveats,
@@ -437,8 +469,11 @@ impl RoutePolicy {
                 RuntimeSupportReason::ManifestContractMismatch
             },
             summary:
-                "this runtime contour is intended for modeling and local experimentation rather than MVP claims"
-                    .to_string(),
+                concat!(
+                    "this runtime contour is intended for modeling and local experimentation ",
+                    "rather than MVP claims"
+                )
+                .to_string(),
             in_mvp_scope: false,
             caveats,
         }
@@ -537,7 +572,10 @@ mod tests {
         let assessment = policy.assess_runtime_support(&manifest, "xray-core");
 
         assert_eq!(assessment.tier, RuntimeSupportTier::ContractMismatch);
-        assert_eq!(assessment.reason, RuntimeSupportReason::ManifestContractMismatch);
+        assert_eq!(
+            assessment.reason,
+            RuntimeSupportReason::ManifestContractMismatch
+        );
         assert!(!assessment.caveats.is_empty());
     }
 }
