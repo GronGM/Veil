@@ -3,3 +3,7 @@ name = "veil-cli"
 edition.workspace = true
 license.workspace = true
 version.workspace = true
+
+[dependencies]
+veil-core = { path = "../veil-core" }
+veil-adapter-xray = { path = "../veil-adapter-xray" }
