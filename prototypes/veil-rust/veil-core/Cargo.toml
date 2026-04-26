@@ -6,6 +6,8 @@ version.workspace = true
 
 [dependencies]
 veil-adapter-api = { path = "../veil-adapter-api" }
+veil-adapter-mock = { path = "../veil-adapter-mock" }
+veil-adapter-xray = { path = "../veil-adapter-xray" }
 veil-diagnostics = { path = "../veil-diagnostics" }
 veil-manifest = { path = "../veil-manifest" }
 veil-policy = { path = "../veil-policy" }
