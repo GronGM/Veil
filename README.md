@@ -100,6 +100,21 @@ The public branch now also includes the first `prototypes/veil-rust/` workspace 
 - `docs/veil-phase-map.md` - public phase map and delivery shape
 - `prototypes/README.md` - expectations for future prototype work
 - `prototypes/veil-rust/` - initial public Rust workspace skeleton
+- `.github/workflows/rust.yml` - CI checks for the public Rust workspace
+
+## Validation
+
+The public Rust workspace is intended to be validated automatically in GitHub Actions.
+
+The workflow runs:
+
+```bash
+cargo fmt --all --check
+cargo check --workspace
+cargo test --workspace
+```
+
+inside `prototypes/veil-rust`.
 
 ## Bottom Line
 
