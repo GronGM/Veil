@@ -20,6 +20,7 @@ Current repository state:
 - the demo CLI now supports explicit `select-endpoint` and `select-backend` overrides, and those choices are carried into the dry-run plan rather than being handled only in the CLI layer
 - the demo CLI can also temporarily disable a registered backend for mismatch testing, and the compact diagnostics summary now shows applied overrides directly in the top block
 - the demo CLI now also has a `demo matrix` mode that runs a small built-in scenario set and prints concise per-scenario results
+- the demo matrix can now run a single named scenario and export a structured JSON report for later inspection
 - the project is intentionally control-plane first
 - dataplane backends are treated as replaceable adapters
 - Linux plus Xray is the first honest MVP runtime contour inherited from the GMvpn reference work

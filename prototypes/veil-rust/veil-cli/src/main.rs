@@ -1,5 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::to_string_pretty;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -82,6 +82,10 @@ struct DemoArgs {
 struct MatrixArgs {
     #[arg(long = "raw-json")]
     raw_json: bool,
+    #[arg(long = "scenario")]
+    scenario: Option<String>,
+    #[arg(long = "export-json")]
+    export_json: Option<String>,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -178,6 +182,26 @@ struct DemoMatrixScenario {
     name: &'static str,
     description: &'static str,
     args: DemoArgs,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DemoMatrixScenarioResult {
+    name: String,
+    description: String,
+    applied_overrides: String,
+    outcome: String,
+    selected_endpoint_id: String,
+    selected_backend_name: String,
+    compatibility_ok: bool,
+    compatibility_summary: String,
+    preflight_ready: bool,
+    rejected_routes: usize,
+    route_summary: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct DemoMatrixReport {
+    scenarios: Vec<DemoMatrixScenarioResult>,
 }
 
 fn run_demo(args: DemoArgs) -> Result<(), String> {
@@ -302,7 +326,8 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
 }
 
 fn run_demo_matrix(args: MatrixArgs) -> Result<(), String> {
-    let scenarios = demo_matrix_scenarios();
+    let scenarios = select_demo_matrix_scenarios(args.scenario.as_deref())?;
+    let mut results = Vec::new();
     println!("demo_matrix_scenarios={}", scenarios.len());
 
     for scenario in scenarios {
@@ -316,6 +341,7 @@ fn run_demo_matrix(args: MatrixArgs) -> Result<(), String> {
             policy,
             overrides.clone(),
         );
+        let result = build_demo_matrix_result(&scenario, &overrides, &plan);
 
         println!("scenario={} description={}", scenario.name, scenario.description);
         println!("  overrides={}", summarize_applied_overrides(&overrides));
@@ -327,9 +353,34 @@ fn run_demo_matrix(args: MatrixArgs) -> Result<(), String> {
                 to_string_pretty(&plan.support_bundle).unwrap_or_else(|_| "{}".to_string())
             );
         }
+
+        results.push(result);
+    }
+
+    if let Some(path) = args.export_json.as_deref() {
+        export_demo_matrix_report(path, &DemoMatrixReport { scenarios: results })?;
+        println!("demo_matrix_exported_to={path}");
     }
 
     Ok(())
+}
+
+fn select_demo_matrix_scenarios(
+    scenario_name: Option<&str>,
+) -> Result<Vec<DemoMatrixScenario>, String> {
+    let scenarios = demo_matrix_scenarios();
+    if let Some(name) = scenario_name {
+        let matched = scenarios
+            .into_iter()
+            .filter(|scenario| scenario.name == name)
+            .collect::<Vec<_>>();
+        if matched.is_empty() {
+            return Err(format!("unknown demo matrix scenario '{name}'"));
+        }
+        Ok(matched)
+    } else {
+        Ok(scenarios)
+    }
 }
 
 fn demo_matrix_scenarios() -> Vec<DemoMatrixScenario> {
@@ -393,6 +444,69 @@ fn summarize_matrix_result(plan: &veil_core::SessionPlan) -> String {
         preflight_ready,
         plan.rejected_routes.len()
     )
+}
+
+fn build_demo_matrix_result(
+    scenario: &DemoMatrixScenario,
+    overrides: &DryRunOverrides,
+    plan: &veil_core::SessionPlan,
+) -> DemoMatrixScenarioResult {
+    DemoMatrixScenarioResult {
+        name: scenario.name.to_string(),
+        description: scenario.description.to_string(),
+        applied_overrides: summarize_applied_overrides(overrides),
+        outcome: format!("{:?}", plan.outcome),
+        selected_endpoint_id: plan
+            .selected_endpoint_id
+            .clone()
+            .unwrap_or_else(|| "none".to_string()),
+        selected_backend_name: plan
+            .selected_backend_name
+            .clone()
+            .unwrap_or_else(|| "none".to_string()),
+        compatibility_ok: plan
+            .support_bundle
+            .adapter_compatibility_diagnostics
+            .compatibility_ok,
+        compatibility_summary: plan
+            .support_bundle
+            .adapter_compatibility_diagnostics
+            .summary
+            .clone(),
+        preflight_ready: plan
+            .support_bundle
+            .backend_preflight_diagnostics
+            .as_ref()
+            .map(|preflight| preflight.ready_for_dry_run_connect)
+            .unwrap_or(false),
+        rejected_routes: plan.rejected_routes.len(),
+        route_summary: plan.route_summary.clone(),
+    }
+}
+
+fn export_demo_matrix_report(path: &str, report: &DemoMatrixReport) -> Result<(), String> {
+    let output_path = PathBuf::from(path);
+    if let Some(parent) = output_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "failed to create export directory '{}': {}",
+                    parent.display(),
+                    error
+                )
+            })?;
+        }
+    }
+
+    let payload = to_string_pretty(report)
+        .map_err(|error| format!("failed to serialize demo matrix report: {}", error))?;
+    fs::write(&output_path, payload).map_err(|error| {
+        format!(
+            "failed to write demo matrix report '{}': {}",
+            output_path.display(),
+            error
+        )
+    })
 }
 
 fn build_dry_run_overrides(args: &DemoArgs) -> DryRunOverrides {
@@ -855,6 +969,15 @@ mod tests {
     }
 
     #[test]
+    fn matrix_can_select_single_named_scenario() {
+        let scenarios = select_demo_matrix_scenarios(Some("baseline"))
+            .expect("scenario should resolve");
+
+        assert_eq!(scenarios.len(), 1);
+        assert_eq!(scenarios[0].name, "baseline");
+    }
+
+    #[test]
     fn export_redacted_bundle_writes_json_file() {
         let temp_dir = std::env::temp_dir().join("veil-cli-export-test");
         let output_path = temp_dir.join("bundle.json");
@@ -967,6 +1090,40 @@ mod tests {
         let contents = fs::read_to_string(&output_path).expect("file should exist");
         assert!(contents.contains("\"manifest_valid\": true"));
         assert!(contents.contains("\"runtime_support_tier\": \"mvp-supported\""));
+
+        let _ = fs::remove_file(&output_path);
+        let _ = fs::remove_dir(&temp_dir);
+    }
+
+    #[test]
+    fn export_demo_matrix_report_writes_json_file() {
+        let temp_dir = std::env::temp_dir().join("veil-cli-matrix-export-test");
+        let output_path = temp_dir.join("matrix.json");
+        let report = DemoMatrixReport {
+            scenarios: vec![DemoMatrixScenarioResult {
+                name: "baseline".to_string(),
+                description: "default path".to_string(),
+                applied_overrides: "endpoint=none backend=none disabled_registered_backends=none"
+                    .to_string(),
+                outcome: "ReadyToConnect".to_string(),
+                selected_endpoint_id: "edge-1".to_string(),
+                selected_backend_name: "xray-core".to_string(),
+                compatibility_ok: true,
+                compatibility_summary:
+                    "manifest and adapter registry align for advertised backends: mock-backend, xray-core"
+                        .to_string(),
+                preflight_ready: true,
+                rejected_routes: 0,
+                route_summary: "selected=edge-1".to_string(),
+            }],
+        };
+
+        export_demo_matrix_report(output_path.to_str().expect("utf-8 path"), &report)
+            .expect("export should succeed");
+
+        let contents = fs::read_to_string(&output_path).expect("file should exist");
+        assert!(contents.contains("\"name\": \"baseline\""));
+        assert!(contents.contains("\"compatibility_ok\": true"));
 
         let _ = fs::remove_file(&output_path);
         let _ = fs::remove_dir(&temp_dir);

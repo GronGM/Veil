@@ -50,6 +50,7 @@ Recent prototype slice:
 - `veil-cli demo` now supports explicit backend and endpoint selection overrides so dry-run can reproduce `xray-core`, `mock-backend`, or mismatch paths on demand
 - `veil-cli demo --disable-registered-backend <name>` now lets dry-run intentionally hide a local adapter registration so compatibility mismatch paths can be reproduced without code edits
 - `veil-cli demo matrix` now runs a small built-in scenario set and prints per-scenario outcome, selected route, compatibility status, preflight status, and rejected-route count
+- `veil-cli demo matrix` now also supports `--scenario <name>` and `--export-json <path>` for targeted runs and machine-readable artifacts
 
 Example policy files:
 
@@ -70,6 +71,8 @@ cargo run -p veil-cli -- demo --select-backend mock-backend
 cargo run -p veil-cli -- demo --select-endpoint edge-1
 cargo run -p veil-cli -- demo --select-backend xray-core --disable-registered-backend xray-core
 cargo run -p veil-cli -- demo matrix
+cargo run -p veil-cli -- demo matrix --scenario forced_registry_mismatch
+cargo run -p veil-cli -- demo matrix --export-json output/demo-matrix.json
 ```
 
 Validation commands once Rust toolchain is available:
