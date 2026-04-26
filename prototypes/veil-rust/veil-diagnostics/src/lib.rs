@@ -40,6 +40,26 @@ impl RedactedDryRunDiagnostics {
             self.decision_summary
         )
     }
+
+    /// Render a small JSON-like diagnostics artifact for machine-readable workflows.
+    pub fn render_json(&self) -> String {
+        format!(
+            concat!(
+                "{\n",
+                "  \"provider_label\": \"{}\",\n",
+                "  \"profile_label\": \"{}\",\n",
+                "  \"backend_name\": \"{}\",\n",
+                "  \"allowed\": {},\n",
+                "  \"decision_summary\": \"{}\"\n",
+                "}}"
+            ),
+            self.provider_label,
+            self.profile_label,
+            self.backend_name,
+            self.allowed,
+            escape_json(&self.decision_summary)
+        )
+    }
 }
 
 fn redact_name(value: &str) -> String {
@@ -48,4 +68,8 @@ fn redact_name(value: &str) -> String {
     } else {
         format!("{}***", &value[..3])
     }
+}
+
+fn escape_json(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
 }
