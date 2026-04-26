@@ -10,6 +10,7 @@ pub struct RedactedDryRunDiagnostics {
     pub backend_name: String,
     pub allowed: bool,
     pub decision_summary: String,
+    pub capabilities_summary: String,
 }
 
 impl RedactedDryRunDiagnostics {
@@ -19,6 +20,7 @@ impl RedactedDryRunDiagnostics {
         backend_name: &str,
         allowed: bool,
         decision_summary: &str,
+        capabilities_summary: &str,
     ) -> Self {
         Self {
             provider_label: redact_name(provider_name),
@@ -26,18 +28,20 @@ impl RedactedDryRunDiagnostics {
             backend_name: backend_name.to_string(),
             allowed,
             decision_summary: decision_summary.to_string(),
+            capabilities_summary: capabilities_summary.to_string(),
         }
     }
 
     /// Render a compact redacted diagnostics block for CLI output.
     pub fn render(&self) -> String {
         format!(
-            "Veil diagnostics\nprovider: {}\nprofile: {}\nbackend: {}\nallowed: {}\ndecision: {}",
+            "Veil diagnostics\nprovider: {}\nprofile: {}\nbackend: {}\nallowed: {}\ndecision: {}\ncapabilities: {}",
             self.provider_label,
             self.profile_label,
             self.backend_name,
             self.allowed,
-            self.decision_summary
+            self.decision_summary,
+            self.capabilities_summary
         )
     }
 
@@ -50,14 +54,16 @@ impl RedactedDryRunDiagnostics {
                 "  \"profile_label\": \"{}\",\n",
                 "  \"backend_name\": \"{}\",\n",
                 "  \"allowed\": {},\n",
-                "  \"decision_summary\": \"{}\"\n",
+                "  \"decision_summary\": \"{}\",\n",
+                "  \"capabilities_summary\": \"{}\"\n",
                 "}}"
             ),
             self.provider_label,
             self.profile_label,
             self.backend_name,
             self.allowed,
-            escape_json(&self.decision_summary)
+            escape_json(&self.decision_summary),
+            escape_json(&self.capabilities_summary)
         )
     }
 }
