@@ -43,6 +43,8 @@ The initial planned module boundaries are:
 
 These are target boundaries for phased implementation, not a claim that every module already exists on this public branch.
 
+The public branch now includes the first `prototypes/veil-rust/` skeleton so those boundaries have a visible workspace home.
+
 ## MVP Direction
 
 The first honest MVP should aim for:
@@ -72,6 +74,7 @@ At the time of this document:
 
 - the public repository is still in an early structuring stage
 - this RFC defines intended architecture, not completed implementation
+- `prototypes/veil-rust/` now exists as a public workspace skeleton
 - future prototype work should land in small, reviewable slices
 
 ## Near-Term Deliverables
