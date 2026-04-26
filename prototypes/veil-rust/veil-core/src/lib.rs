@@ -3,6 +3,7 @@
 //! Core orchestration skeleton for Veil.
 
 use veil_adapter_api::{DataplaneBackend, DryRunPlan};
+use veil_diagnostics::RedactedDryRunDiagnostics;
 use veil_manifest::ProviderManifest;
 use veil_policy::{PolicyDecision, RoutePolicy};
 
@@ -50,6 +51,17 @@ impl DryRunReport {
             decision_summary: decision.summary,
             allowed: decision.allowed,
         }
+    }
+
+    /// Build a redacted diagnostics view for support-facing CLI output.
+    pub fn redacted_diagnostics(&self) -> RedactedDryRunDiagnostics {
+        RedactedDryRunDiagnostics::new(
+            &self.provider_name,
+            &self.profile_name,
+            &self.backend_name,
+            self.allowed,
+            &self.decision_summary,
+        )
     }
 
     /// Render a compact operator-facing report for CLI output.
