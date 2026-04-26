@@ -10,3 +10,4 @@ veil-adapter-mock = { path = "../veil-adapter-mock" }
 veil-adapter-xray = { path = "../veil-adapter-xray" }
 veil-manifest = { path = "../veil-manifest" }
 veil-policy = { path = "../veil-policy" }
+veil-routing = { path = "../veil-routing" }
