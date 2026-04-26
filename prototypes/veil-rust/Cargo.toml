@@ -1,0 +1,17 @@
+[workspace]
+members = [
+  "veil-core",
+  "veil-adapter-api",
+  "veil-adapter-xray",
+  "veil-manifest",
+  "veil-policy",
+  "veil-routing",
+  "veil-diagnostics",
+  "veil-cli",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
