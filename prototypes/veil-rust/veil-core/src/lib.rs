@@ -2,7 +2,7 @@
 
 //! Core orchestration skeleton for Veil.
 
-use veil_adapter_api::{DataplaneBackend, DryRunPlan};
+use veil_adapter_api::{AdapterCapabilities, DataplaneBackend, DryRunPlan};
 use veil_diagnostics::RedactedDryRunDiagnostics;
 use veil_manifest::ProviderManifest;
 use veil_policy::{PolicyDecision, RoutePolicy};
@@ -20,6 +20,7 @@ pub struct DryRunReport {
     pub command_preview: String,
     pub config_summary: String,
     pub decision_summary: String,
+    pub capabilities_summary: String,
     pub allowed: bool,
 }
 
@@ -32,7 +33,8 @@ impl SessionEngine {
     ) -> DryRunReport {
         let plan = backend.build_dry_run_plan();
         let decision = policy.evaluate(manifest, plan.backend_name);
-        DryRunReport::from_parts(manifest, plan, decision)
+        let capabilities = backend.capabilities();
+        DryRunReport::from_parts(manifest, plan, decision, capabilities)
     }
 }
 
@@ -41,6 +43,7 @@ impl DryRunReport {
         manifest: &ProviderManifest,
         plan: DryRunPlan,
         decision: PolicyDecision,
+        capabilities: AdapterCapabilities,
     ) -> Self {
         Self {
             provider_name: manifest.provider_name.clone(),
@@ -49,6 +52,7 @@ impl DryRunReport {
             command_preview: plan.command_preview,
             config_summary: plan.config_summary,
             decision_summary: decision.summary,
+            capabilities_summary: render_capabilities(&capabilities),
             allowed: decision.allowed,
         }
     }
@@ -61,20 +65,61 @@ impl DryRunReport {
             &self.backend_name,
             self.allowed,
             &self.decision_summary,
+            &self.capabilities_summary,
         )
     }
 
     /// Render a compact operator-facing report for CLI output.
     pub fn render(&self) -> String {
         format!(
-            "Veil dry-run\nprovider: {}\nprofile: {}\nbackend: {}\nallowed: {}\ndecision: {}\ncommand: {}\nconfig: {}",
+            "Veil dry-run\nprovider: {}\nprofile: {}\nbackend: {}\nallowed: {}\ndecision: {}\ncapabilities: {}\ncommand: {}\nconfig: {}",
             self.provider_name,
             self.profile_name,
             self.backend_name,
             self.allowed,
             self.decision_summary,
+            self.capabilities_summary,
             self.command_preview,
             self.config_summary
         )
+    }
+}
+
+fn render_capabilities(capabilities: &AdapterCapabilities) -> String {
+    format!(
+        "dry_run={}, typed_config={}, real_binary={}",
+        capabilities.supports_dry_run,
+        capabilities.renders_typed_config,
+        capabilities.requires_real_binary
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use veil_adapter_mock::MockBackend;
+    use veil_adapter_xray::XrayBackend;
+
+    #[test]
+    fn dry_run_report_shows_xray_capabilities() {
+        let manifest = ProviderManifest::demo();
+        let policy = RoutePolicy::demo();
+        let report = SessionEngine::dry_run(&manifest, &policy, &XrayBackend::default());
+
+        assert!(report.allowed);
+        assert!(report.capabilities_summary.contains("typed_config=true"));
+        assert!(report.capabilities_summary.contains("real_binary=true"));
+    }
+
+    #[test]
+    fn dry_run_report_changes_with_mock_backend() {
+        let manifest = ProviderManifest::demo();
+        let policy = RoutePolicy::mismatch_demo();
+        let report = SessionEngine::dry_run(&manifest, &policy, &MockBackend::default());
+
+        assert!(report.allowed);
+        assert_eq!(report.backend_name, "mock-backend");
+        assert!(report.capabilities_summary.contains("typed_config=false"));
+        assert!(report.capabilities_summary.contains("real_binary=false"));
     }
 }
