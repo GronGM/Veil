@@ -2,7 +2,7 @@
 
 //! Xray adapter skeleton for Veil.
 
-use veil_adapter_api::{DataplaneBackend, DryRunPlan};
+use veil_adapter_api::{AdapterCapabilities, DataplaneBackend, DryRunPlan};
 
 /// Placeholder Xray backend adapter.
 #[derive(Debug, Clone, Default)]
@@ -18,6 +18,15 @@ impl DataplaneBackend for XrayBackend {
             backend_name: self.backend_name(),
             command_preview: "xray -test -config generated/veil-xray.json".to_string(),
             config_summary: "typed Xray config preview for a future generated runtime artifact".to_string(),
+        }
+    }
+
+    fn capabilities(&self) -> AdapterCapabilities {
+        AdapterCapabilities {
+            backend_name: self.backend_name(),
+            supports_dry_run: true,
+            renders_typed_config: true,
+            requires_real_binary: true,
         }
     }
 }
