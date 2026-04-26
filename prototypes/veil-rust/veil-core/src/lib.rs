@@ -1,13 +1,14 @@
 //! Minimal control-plane skeleton for Veil.
 
 use serde::{Deserialize, Serialize};
+use serde_json::to_value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 use veil_adapter_api::{AdapterContext, AdapterRegistrySnapshot, StaticAdapterRegistry};
 use veil_adapter_xray::XrayDryRunBackend;
 use veil_diagnostics::{
-    build_incident_report, build_route_diagnostics, build_support_bundle, IncidentReport,
-    SupportBundle,
+    build_backend_preflight_diagnostics, build_incident_report, build_route_diagnostics,
+    build_support_bundle, BackendPreflightDiagnostics, IncidentReport, SupportBundle,
 };
 use veil_manifest::{demo_provider_manifest, validate_manifest, ProviderManifest};
 use veil_policy::{
@@ -129,16 +130,43 @@ pub fn build_dry_run_plan_with_policy(
             .resolve_backend_name_for_endpoint(&selection.selected.endpoint)
             .ok()
     });
+    let backend_preflight_diagnostics = route_selection
+        .as_ref()
+        .ok()
+        .and_then(|selection| {
+            if selected_backend_name.as_deref() == Some("xray-core") {
+                build_xray_backend_preflight(&selection.selected.endpoint, &adapter_context).ok()
+            } else {
+                None
+            }
+        });
     if let Some(backend_name) = &selected_backend_name {
         lifecycle.push(SessionEvent {
             phase: SessionPhase::Connecting,
             detail: format!("resolved backend '{backend_name}' from adapter registry"),
         });
-        let _ = &adapter_context;
     }
+    if let Some(preflight) = &backend_preflight_diagnostics {
+        lifecycle.push(SessionEvent {
+            phase: SessionPhase::Connecting,
+            detail: format!(
+                "prepared backend preflight for '{}' (binary_present={})",
+                preflight.backend_name, preflight.binary_present
+            ),
+        });
+    }
+    let backend_preflight_ready = selected_endpoint_id.is_some()
+        && backend_preflight_diagnostics
+            .as_ref()
+            .map(|preflight| preflight.ready_for_dry_run_connect)
+            .unwrap_or(false);
     let diagnostics_reason = format!(
-        "manifest_valid={} policy_valid={} runtime_support={} guidance={}",
-        manifest_is_valid, policy_is_valid, runtime_support.tier, guidance.recommended_action
+        "manifest_valid={} policy_valid={} backend_preflight_ready={} runtime_support={} guidance={}",
+        manifest_is_valid,
+        policy_is_valid,
+        backend_preflight_ready,
+        runtime_support.tier,
+        guidance.recommended_action
     );
     let route_summary = route_selection
         .as_ref()
@@ -157,7 +185,7 @@ pub fn build_dry_run_plan_with_policy(
     } else {
         SessionPhase::Failed
     };
-    let outcome = if manifest_is_valid && selected_endpoint_id.is_some() {
+    let outcome = if manifest_is_valid && backend_preflight_ready {
         SessionOutcome::ReadyToConnect
     } else if manifest_is_valid {
         SessionOutcome::Planned
@@ -190,6 +218,7 @@ pub fn build_dry_run_plan_with_policy(
         manifest_is_valid,
         manifest,
         runtime_support,
+        backend_preflight_diagnostics,
         route_diagnostics,
         &route_policy,
         incident_report.clone(),
@@ -225,6 +254,33 @@ pub fn build_session_report(plan: &SessionPlan) -> SessionReport {
     }
 }
 
+fn build_xray_backend_preflight(
+    endpoint: &veil_manifest::Endpoint,
+    adapter_context: &AdapterContext,
+) -> Result<BackendPreflightDiagnostics, veil_adapter_api::AdapterError> {
+    let preflight = XrayDryRunBackend::build_dry_run_preflight(
+        endpoint,
+        "xray",
+        &format!("runtime/{}.json", adapter_context.session_id),
+    )?;
+
+    Ok(build_backend_preflight_diagnostics(
+        "xray-core",
+        preflight.binary_path,
+        preflight.config_path,
+        preflight.binary_present,
+        if preflight.binary_present {
+            "typed xray config rendered and dry-run command prepared"
+        } else {
+            "typed xray config rendered and dry-run command prepared; xray binary was not found in the current environment"
+        },
+        preflight.command.program,
+        preflight.command.args,
+        to_value(preflight.rendered_config)
+            .map_err(|error| veil_adapter_api::AdapterError::InvalidConfig(error.to_string()))?,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,6 +302,7 @@ mod tests {
         assert_eq!(plan.selected_backend_name.as_deref(), Some("xray-core"));
         assert!(plan.diagnostics_reason.contains("manifest_valid=true"));
         assert!(plan.diagnostics_reason.contains("policy_valid=true"));
+        assert!(plan.diagnostics_reason.contains("backend_preflight_ready=true"));
         assert!(plan.route_summary.contains("selected=edge-1"));
         assert!(!plan.fallback_triggered);
         assert!(plan.rejected_routes.is_empty());
@@ -262,7 +319,14 @@ mod tests {
             plan.support_bundle.redacted_policy_diagnostics.retry_budget_max_candidates,
             2
         );
-        assert_eq!(plan.lifecycle.len(), 4);
+        assert!(
+            plan.support_bundle
+                .backend_preflight_diagnostics
+                .as_ref()
+                .expect("backend preflight")
+                .ready_for_dry_run_connect
+        );
+        assert_eq!(plan.lifecycle.len(), 5);
         assert_eq!(plan.adapter_registry.entries.len(), 1);
     }
 
@@ -280,7 +344,7 @@ mod tests {
         assert_eq!(report.selected_endpoint_id.as_deref(), Some("edge-1"));
         assert_eq!(report.selected_backend_name.as_deref(), Some("xray-core"));
         assert_eq!(report.incident_severity, "ok");
-        assert_eq!(report.event_count, 4);
+        assert_eq!(report.event_count, 5);
     }
 
     #[test]

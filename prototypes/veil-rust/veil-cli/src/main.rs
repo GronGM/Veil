@@ -5,8 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use veil_core::{build_dry_run_plan_with_policy, build_session_report};
 use veil_diagnostics::{
-    build_redacted_support_bundle, RedactedManifestDiagnostics, RedactedPolicyDiagnostics,
-    RedactedRejectedRoute, RedactedRouteDiagnostics, RedactedSupportBundle,
+    build_redacted_support_bundle, RedactedBackendPreflightDiagnostics,
+    RedactedManifestDiagnostics, RedactedPolicyDiagnostics, RedactedRejectedRoute,
+    RedactedRouteDiagnostics, RedactedSupportBundle,
 };
 use veil_manifest::demo_provider_manifest;
 use veil_policy::{
@@ -33,6 +34,8 @@ struct DemoArgs {
     raw_json: bool,
     #[arg(long = "export-redacted-bundle")]
     export_redacted_bundle: Option<String>,
+    #[arg(long = "export-redacted-preflight")]
+    export_redacted_preflight: Option<String>,
     #[arg(long = "policy-file")]
     policy_file: Option<String>,
     #[arg(long = "allow-backend")]
@@ -156,6 +159,9 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
     let redacted_bundle = build_redacted_support_bundle(&plan.support_bundle);
     let summary = build_compact_diagnostics_summary(
         &plan.support_bundle.redacted_manifest_diagnostics,
+        plan.support_bundle
+            .redacted_backend_preflight_diagnostics
+            .as_ref(),
         &plan.support_bundle.redacted_route_diagnostics,
         &plan.support_bundle.redacted_policy_diagnostics,
     );
@@ -195,10 +201,24 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
         export_redacted_bundle(path, &redacted_bundle)?;
         println!("redacted_bundle_exported_to={path}");
     }
+    if let Some(path) = &args.export_redacted_preflight {
+        export_redacted_preflight(
+            path,
+            plan.support_bundle
+                .redacted_backend_preflight_diagnostics
+                .as_ref(),
+        )?;
+        println!("redacted_preflight_exported_to={path}");
+    }
     println!(
         "redacted_manifest_diagnostics={}",
         to_string_pretty(&plan.support_bundle.redacted_manifest_diagnostics)
             .unwrap_or_else(|_| "{}".to_string())
+    );
+    println!(
+        "redacted_backend_preflight_diagnostics={}",
+        to_string_pretty(&plan.support_bundle.redacted_backend_preflight_diagnostics)
+            .unwrap_or_else(|_| "null".to_string())
     );
     println!(
         "redacted_route_diagnostics={}",
@@ -220,6 +240,11 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
             "route_diagnostics={}",
             to_string_pretty(&plan.support_bundle.route_diagnostics)
                 .unwrap_or_else(|_| "{}".to_string())
+        );
+        println!(
+            "backend_preflight_diagnostics={}",
+            to_string_pretty(&plan.support_bundle.backend_preflight_diagnostics)
+                .unwrap_or_else(|_| "null".to_string())
         );
         println!(
             "support_bundle={}",
@@ -255,8 +280,41 @@ fn export_redacted_bundle(path: &str, bundle: &RedactedSupportBundle) -> Result<
     })
 }
 
+fn export_redacted_preflight(
+    path: &str,
+    preflight: Option<&RedactedBackendPreflightDiagnostics>,
+) -> Result<(), String> {
+    let preflight = preflight.ok_or_else(|| {
+        "failed to export redacted preflight: no backend preflight diagnostics were recorded"
+            .to_string()
+    })?;
+    let output_path = PathBuf::from(path);
+    if let Some(parent) = output_path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "failed to create export directory '{}': {}",
+                    parent.display(),
+                    error
+                )
+            })?;
+        }
+    }
+
+    let payload = to_string_pretty(preflight)
+        .map_err(|error| format!("failed to serialize redacted preflight: {}", error))?;
+    fs::write(&output_path, payload).map_err(|error| {
+        format!(
+            "failed to write redacted preflight '{}': {}",
+            output_path.display(),
+            error
+        )
+    })
+}
+
 fn build_compact_diagnostics_summary(
     manifest: &RedactedManifestDiagnostics,
+    backend_preflight: Option<&RedactedBackendPreflightDiagnostics>,
     route: &RedactedRouteDiagnostics,
     policy: &RedactedPolicyDiagnostics,
 ) -> String {
@@ -276,12 +334,23 @@ fn build_compact_diagnostics_summary(
     let preference = policy.route_preference.to_lowercase();
     let fallback_mode = policy.fallback_mode.to_lowercase();
     let rejected_summary = summarize_rejected_routes(&route.rejected_routes);
+    let backend_preflight_summary = backend_preflight
+        .map(|preflight| {
+            format!(
+                "{} ready={} binary_present={}",
+                preflight.backend_name,
+                preflight.ready_for_dry_run_connect,
+                preflight.binary_present
+            )
+        })
+        .unwrap_or_else(|| "none".to_string());
 
     [
         format!(
             "manifest: schema v{}, endpoints {}, profile {:?}",
             manifest.metadata.schema_version, manifest.endpoint_count, manifest.profile_kind
         ),
+        format!("backend preflight: {backend_preflight_summary}"),
         format!("selected endpoint: {selected_endpoint}"),
         format!("selected backend: {selected_backend}"),
         format!("route fallback: {fallback_state} ({fallback_mode})"),
@@ -579,6 +648,25 @@ mod tests {
                 transport_retry_budget: 1,
                 profile_kind: Some("ProviderProfile".to_string()),
             },
+            redacted_backend_preflight_diagnostics: Some(RedactedBackendPreflightDiagnostics {
+                backend_name: "xray-core".to_string(),
+                ready_for_dry_run_connect: true,
+                binary_path: "xray".to_string(),
+                config_path: "runtime/session-1.json".to_string(),
+                binary_present: false,
+                readiness_note: "dry-run command prepared".to_string(),
+                command: veil_diagnostics::BackendPreflightCommandDiagnostics {
+                    program: "xray".to_string(),
+                    args: vec![
+                        "run".to_string(),
+                        "-config".to_string(),
+                        "runtime/session-1.json".to_string(),
+                    ],
+                },
+                rendered_config: serde_json::json!({
+                    "outbounds": [{ "protocol": "vless" }]
+                }),
+            }),
             redacted_route_diagnostics: RedactedRouteDiagnostics {
                 selected_endpoint_id: Some("edge-1".to_string()),
                 selected_backend_name: Some("xray-core".to_string()),
@@ -721,14 +809,70 @@ mod tests {
             known_good_enabled: true,
             known_good_bonus_points: 3,
         };
+        let backend_preflight = RedactedBackendPreflightDiagnostics {
+            backend_name: "xray-core".to_string(),
+            ready_for_dry_run_connect: true,
+            binary_path: "xray".to_string(),
+            config_path: "runtime/session-1.json".to_string(),
+            binary_present: false,
+            readiness_note: "dry-run command prepared".to_string(),
+            command: veil_diagnostics::BackendPreflightCommandDiagnostics {
+                program: "xray".to_string(),
+                args: vec![
+                    "run".to_string(),
+                    "-config".to_string(),
+                    "runtime/session-1.json".to_string(),
+                ],
+            },
+            rendered_config: serde_json::json!({
+                "outbounds": [{ "protocol": "vless" }]
+            }),
+        };
 
-        let summary = build_compact_diagnostics_summary(&manifest, &route, &policy);
+        let summary =
+            build_compact_diagnostics_summary(&manifest, Some(&backend_preflight), &route, &policy);
 
         assert!(summary.contains("manifest: schema v1, endpoints 1"));
+        assert!(summary.contains("backend preflight: xray-core ready=true binary_present=false"));
         assert!(summary.contains("selected endpoint: edge-1"));
         assert!(summary.contains("selected backend: xray-core"));
         assert!(summary.contains("route preference: preferstability"));
         assert!(summary.contains("rejected routes: none"));
+    }
+
+    #[test]
+    fn export_redacted_preflight_writes_json_file() {
+        let temp_dir = std::env::temp_dir().join("veil-cli-preflight-export-test");
+        let output_path = temp_dir.join("preflight.json");
+        let preflight = RedactedBackendPreflightDiagnostics {
+            backend_name: "xray-core".to_string(),
+            ready_for_dry_run_connect: true,
+            binary_path: "xray".to_string(),
+            config_path: "runtime/session-1.json".to_string(),
+            binary_present: false,
+            readiness_note: "dry-run command prepared".to_string(),
+            command: veil_diagnostics::BackendPreflightCommandDiagnostics {
+                program: "xray".to_string(),
+                args: vec![
+                    "run".to_string(),
+                    "-config".to_string(),
+                    "runtime/session-1.json".to_string(),
+                ],
+            },
+            rendered_config: serde_json::json!({
+                "outbounds": [{ "protocol": "vless" }]
+            }),
+        };
+
+        export_redacted_preflight(output_path.to_str().expect("utf-8 path"), Some(&preflight))
+            .expect("export should succeed");
+
+        let contents = fs::read_to_string(&output_path).expect("file should exist");
+        assert!(contents.contains("\"backend_name\": \"xray-core\""));
+        assert!(contents.contains("\"binary_present\": false"));
+
+        let _ = fs::remove_file(&output_path);
+        let _ = fs::remove_dir(&temp_dir);
     }
 
     #[test]

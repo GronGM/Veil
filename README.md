@@ -11,6 +11,8 @@ Current repository state:
 - the prototype now includes a typed route policy layer with explicit allow/deny, known-good bias, cooldown handling, and predictable fallback
 - the prototype now includes redacted manifest, route, and policy diagnostics views inside the support bundle
 - the prototype CLI now defaults to a report-focused redacted output, with raw bundle JSON available behind an explicit flag
+- the Xray adapter prototype now renders typed Xray-like config, exposes a dry-run preflight report, and keeps command building separate from lifecycle behavior
+- the control-plane dry-run plan now includes backend preflight diagnostics, and the CLI can export a standalone redacted preflight artifact
 - the project is intentionally control-plane first
 - dataplane backends are treated as replaceable adapters
 - Linux plus Xray is the first honest MVP runtime contour inherited from the GMvpn reference work

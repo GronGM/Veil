@@ -165,7 +165,7 @@ Reference mapping from GMvpn:
 - Public Interfaces: `IncidentReporter`, `SupportBundleExporter`, `RedactionPolicy`.
 - Dependencies: `veil-core`, `veil-routing`, `veil-policy`, `veil-adapter-api`.
 - Hot-swappable Parts: storage/export target may vary; redaction policy remains core-owned.
-- MVP Scope: support bundle and incident summary parity with the GMvpn reference semantics, plus redacted manifest, route, and policy diagnostics views that are safe to show in local CLI output by default.
+- MVP Scope: support bundle and incident summary parity with the GMvpn reference semantics, plus redacted manifest, route, policy, and backend-preflight diagnostics views that are safe to show in local CLI output by default.
 - v1 Scope: bounded structured diagnostics packs and better correlation IDs.
 - v2/Research Scope: fleet-facing aggregation or external support integrations.
 - Failure Modes: leaking sensitive fields, drift between CLI output and bundle contents, truncated evidence hiding cause of failure.
@@ -193,7 +193,7 @@ Reference mapping from GMvpn:
 - Public Interfaces: `XrayBackend`, `XrayConfigRenderer`, `XrayCapabilityDescriptor`.
 - Dependencies: `veil-adapter-api`, process runner abstraction, filesystem/config writer.
 - Hot-swappable Parts: binary path, config validation runner, renderer options.
-- MVP Scope: dry-run mode, config rendering, binary presence checks, config preflight validation, runtime snapshot.
+- MVP Scope: dry-run mode, typed config rendering, command-spec building separate from lifecycle handling, binary presence checks, config preflight validation, runtime snapshot.
 - v1 Scope: richer feature coverage and improved error attribution.
 - v2/Research Scope: alternative renderer targets or bridge contracts for non-process runtimes.
 - Failure Modes: unsupported endpoint metadata, invalid generated config, missing binary, crash after start.
@@ -207,7 +207,7 @@ Reference mapping from GMvpn:
 - Public Interfaces: command-line commands, dry-run/reporting output, local validation subcommands.
 - Dependencies: every core module, but no backend-specific logic beyond adapter selection.
 - Hot-swappable Parts: output formatters and command surface can evolve independently of control-plane logic.
-- MVP Scope: dry-run and report-focused local CLI with safe redacted output by default, file-based policy overrides, and explicit opt-in raw JSON output for deeper debugging.
+- MVP Scope: dry-run and report-focused local CLI with safe redacted output by default, file-based policy overrides, backend preflight visibility, standalone redacted preflight export, and explicit opt-in raw JSON output for deeper debugging.
 - v1 Scope: subcommand-oriented UX and richer diagnostics commands.
 - v2/Research Scope: local API server or GUI integration shell.
 - Failure Modes: CLI output drifting from support bundle, contract mismatch hidden by permissive flags, local override precedence confusion.

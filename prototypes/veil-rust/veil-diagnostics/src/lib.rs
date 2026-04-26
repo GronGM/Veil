@@ -1,6 +1,7 @@
 //! Incident and support-facing diagnostics skeleton for Veil.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use veil_manifest::{ProviderManifest, XrayEndpointMetadata};
 use veil_policy::{IncidentGuidance, RouteSelectionPolicy, RuntimeSupportAssessment};
 use veil_routing::RejectedRouteCandidate;
@@ -127,6 +128,36 @@ pub struct RedactedManifestDiagnostics {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackendPreflightCommandDiagnostics {
+    pub program: String,
+    pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackendPreflightDiagnostics {
+    pub backend_name: String,
+    pub ready_for_dry_run_connect: bool,
+    pub binary_path: String,
+    pub config_path: String,
+    pub binary_present: bool,
+    pub readiness_note: String,
+    pub command: BackendPreflightCommandDiagnostics,
+    pub rendered_config: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RedactedBackendPreflightDiagnostics {
+    pub backend_name: String,
+    pub ready_for_dry_run_connect: bool,
+    pub binary_path: String,
+    pub config_path: String,
+    pub binary_present: bool,
+    pub readiness_note: String,
+    pub command: BackendPreflightCommandDiagnostics,
+    pub rendered_config: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SupportBundle {
     pub manifest_valid: bool,
     pub runtime_support_tier: String,
@@ -134,6 +165,8 @@ pub struct SupportBundle {
     pub route_summary: String,
     pub endpoint_count: usize,
     pub redacted_manifest_diagnostics: RedactedManifestDiagnostics,
+    pub backend_preflight_diagnostics: Option<BackendPreflightDiagnostics>,
+    pub redacted_backend_preflight_diagnostics: Option<RedactedBackendPreflightDiagnostics>,
     pub route_diagnostics: RouteDiagnostics,
     pub redacted_route_diagnostics: RedactedRouteDiagnostics,
     pub redacted_policy_diagnostics: RedactedPolicyDiagnostics,
@@ -148,6 +181,7 @@ pub struct RedactedSupportBundle {
     pub route_summary: String,
     pub endpoint_count: usize,
     pub redacted_manifest_diagnostics: RedactedManifestDiagnostics,
+    pub redacted_backend_preflight_diagnostics: Option<RedactedBackendPreflightDiagnostics>,
     pub redacted_route_diagnostics: RedactedRouteDiagnostics,
     pub redacted_policy_diagnostics: RedactedPolicyDiagnostics,
     pub incident: RedactedIncidentReport,
@@ -291,15 +325,68 @@ pub fn build_redacted_manifest_diagnostics(
     }
 }
 
+pub fn build_backend_preflight_diagnostics(
+    backend_name: impl Into<String>,
+    binary_path: impl Into<String>,
+    config_path: impl Into<String>,
+    binary_present: bool,
+    readiness_note: impl Into<String>,
+    command_program: impl Into<String>,
+    command_args: Vec<String>,
+    rendered_config: Value,
+) -> BackendPreflightDiagnostics {
+    let readiness_note = readiness_note.into();
+    BackendPreflightDiagnostics {
+        backend_name: backend_name.into(),
+        ready_for_dry_run_connect: true,
+        binary_path: binary_path.into(),
+        config_path: config_path.into(),
+        binary_present,
+        readiness_note,
+        command: BackendPreflightCommandDiagnostics {
+            program: command_program.into(),
+            args: command_args,
+        },
+        rendered_config,
+    }
+}
+
+pub fn build_redacted_backend_preflight_diagnostics(
+    preflight: &BackendPreflightDiagnostics,
+) -> RedactedBackendPreflightDiagnostics {
+    RedactedBackendPreflightDiagnostics {
+        backend_name: preflight.backend_name.clone(),
+        ready_for_dry_run_connect: preflight.ready_for_dry_run_connect,
+        binary_path: redact_sensitive_text(&preflight.binary_path),
+        config_path: redact_sensitive_text(&preflight.config_path),
+        binary_present: preflight.binary_present,
+        readiness_note: redact_sensitive_text(&preflight.readiness_note),
+        command: BackendPreflightCommandDiagnostics {
+            program: redact_sensitive_text(&preflight.command.program),
+            args: preflight
+                .command
+                .args
+                .iter()
+                .map(|arg| redact_sensitive_text(arg))
+                .collect(),
+        },
+        rendered_config: redact_json_value(&preflight.rendered_config),
+    }
+}
+
 pub fn build_support_bundle(
     manifest_valid: bool,
     manifest: &ProviderManifest,
     runtime_support: RuntimeSupportAssessment,
+    backend_preflight_diagnostics: Option<BackendPreflightDiagnostics>,
     route_diagnostics: RouteDiagnostics,
     route_policy: &RouteSelectionPolicy,
     incident: IncidentReport,
 ) -> SupportBundle {
     let redacted_manifest_diagnostics = build_redacted_manifest_diagnostics(manifest);
+    let redacted_backend_preflight_diagnostics = backend_preflight_diagnostics
+        .as_ref()
+        .map(build_redacted_backend_preflight_diagnostics);
     let redacted_route_diagnostics = build_redacted_route_diagnostics(&route_diagnostics);
     let redacted_policy_diagnostics = build_redacted_policy_diagnostics(route_policy);
 
@@ -310,6 +397,8 @@ pub fn build_support_bundle(
         route_summary: route_diagnostics.route_summary.clone(),
         endpoint_count: manifest.endpoints.len(),
         redacted_manifest_diagnostics,
+        backend_preflight_diagnostics,
+        redacted_backend_preflight_diagnostics,
         route_diagnostics,
         redacted_route_diagnostics,
         redacted_policy_diagnostics,
@@ -325,6 +414,9 @@ pub fn build_redacted_support_bundle(bundle: &SupportBundle) -> RedactedSupportB
         route_summary: bundle.redacted_route_diagnostics.route_summary.clone(),
         endpoint_count: bundle.endpoint_count,
         redacted_manifest_diagnostics: bundle.redacted_manifest_diagnostics.clone(),
+        redacted_backend_preflight_diagnostics: bundle
+            .redacted_backend_preflight_diagnostics
+            .clone(),
         redacted_route_diagnostics: bundle.redacted_route_diagnostics.clone(),
         redacted_policy_diagnostics: bundle.redacted_policy_diagnostics.clone(),
         incident: RedactedIncidentReport {
@@ -452,6 +544,19 @@ fn redact_uuid_like_values(input: &str) -> String {
     result
 }
 
+fn redact_json_value(value: &Value) -> Value {
+    match value {
+        Value::String(content) => Value::String(redact_sensitive_text(content)),
+        Value::Array(items) => Value::Array(items.iter().map(redact_json_value).collect()),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, value)| (key.clone(), redact_json_value(value)))
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
+}
+
 fn looks_like_uuid(value: &str) -> bool {
     if value.len() != 36 {
         return false;
@@ -539,6 +644,7 @@ mod tests {
             true,
             &manifest,
             RuntimeSupportAssessment::mvp_supported(),
+            None,
             route_diagnostics,
             &RouteSelectionPolicy::default(),
             incident,
@@ -735,6 +841,7 @@ mod tests {
             true,
             &manifest,
             RuntimeSupportAssessment::mvp_supported(),
+            None,
             route_diagnostics,
             &RouteSelectionPolicy::default(),
             incident,
@@ -745,5 +852,46 @@ mod tests {
         assert!(redacted.route_summary.contains(REDACTED_QUERY_VALUE));
         assert!(redacted.incident.recommended_action.contains(REDACTED_TOKEN));
         assert_eq!(redacted.redacted_manifest_diagnostics.endpoint_count, 1);
+    }
+
+    #[test]
+    fn redacted_backend_preflight_masks_sensitive_strings_inside_rendered_config() {
+        let preflight = build_backend_preflight_diagnostics(
+            "xray-core",
+            "/tmp/runtime.json",
+            "/tmp/runtime.json",
+            false,
+            "Authorization: Bearer unsafe-token",
+            "xray",
+            vec![
+                "run".to_string(),
+                "-config".to_string(),
+                "/tmp/runtime.json".to_string(),
+            ],
+            serde_json::json!({
+                "outbounds": [{
+                    "settings": {
+                        "address": "user:supersecret@example.internal",
+                        "server_name": "https://example.test/connect?token=abc123"
+                    }
+                }]
+            }),
+        );
+
+        let redacted = build_redacted_backend_preflight_diagnostics(&preflight);
+
+        assert!(redacted.readiness_note.contains(REDACTED_TOKEN));
+        assert!(
+            redacted.rendered_config["outbounds"][0]["settings"]["address"]
+                .as_str()
+                .expect("address")
+                .contains(REDACTED_SECRET)
+        );
+        assert!(
+            redacted.rendered_config["outbounds"][0]["settings"]["server_name"]
+                .as_str()
+                .expect("server_name")
+                .contains(REDACTED_QUERY_VALUE)
+        );
     }
 }

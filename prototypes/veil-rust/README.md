@@ -40,6 +40,8 @@ Recent prototype slice:
 - `support_bundle` now includes `redacted_manifest_diagnostics`, so the safe diagnostics surface covers manifest, route, and policy together
 - `veil-cli demo` now defaults to report-focused redacted output and prints raw route/bundle JSON only when `--raw-json` is explicitly requested
 - `veil-cli demo --export-redacted-bundle <path>` now writes a redacted diagnostics artifact to disk for later review or attachment
+- `veil-adapter-xray` now renders a typed Xray-like config model, builds a separate command spec, and reports dry-run preflight details without requiring a real `xray` binary
+- `veil-core` now carries backend preflight details into the dry-run plan, and `veil-cli demo --export-redacted-preflight <path>` can write a standalone safe artifact for review
 
 Example policy files:
 
@@ -55,6 +57,7 @@ cargo run -p veil-cli -- demo --policy-file examples/policies/prefer-eu-stable.j
 cargo run -p veil-cli -- demo --policy-file examples/policies/strict-fallback.json --deny-transport https
 cargo run -p veil-cli -- demo --policy-file examples/policies/prefer-eu-stable.json --raw-json
 cargo run -p veil-cli -- demo --policy-file examples/policies/prefer-eu-stable.json --export-redacted-bundle output/demo-redacted-bundle.json
+cargo run -p veil-cli -- demo --export-redacted-preflight output/demo-redacted-preflight.json
 ```
 
 Validation commands once Rust toolchain is available:
