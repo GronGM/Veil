@@ -1,0 +1,42 @@
+name: Rust CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/rust.yml"
+      - "prototypes/veil-rust/**"
+  pull_request:
+    paths:
+      - ".github/workflows/rust.yml"
+      - "prototypes/veil-rust/**"
+
+jobs:
+  rust-workspace:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: prototypes/veil-rust
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build output
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            prototypes/veil-rust -> target
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: Cargo check
+        run: cargo check --workspace
+
+      - name: Cargo test
+        run: cargo test --workspace
