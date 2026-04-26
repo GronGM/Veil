@@ -27,6 +27,14 @@ impl RoutePolicy {
         }
     }
 
+    /// Build a demo policy mismatch scenario for CLI testing.
+    pub fn mismatch_demo() -> Self {
+        Self {
+            allow_backend: "mock-backend".to_string(),
+            allow_fallback: false,
+        }
+    }
+
     /// Evaluate the manifest against the current backend choice.
     pub fn evaluate(&self, manifest: &ProviderManifest, backend_name: &str) -> PolicyDecision {
         let allowed = backend_name == self.allow_backend;
@@ -42,8 +50,8 @@ impl RoutePolicy {
             )
         } else {
             format!(
-                "policy blocks backend '{}' because only '{}' is allowed",
-                backend_name, self.allow_backend
+                "policy blocks backend '{}' for provider '{}' profile '{}' because only '{}' is allowed",
+                backend_name, manifest.provider_name, manifest.profile_name, self.allow_backend
             )
         };
 
