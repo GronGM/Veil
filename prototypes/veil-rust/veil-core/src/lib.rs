@@ -72,6 +72,12 @@ pub struct SessionReport {
     pub event_count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct DryRunOverrides {
+    pub selected_endpoint_id: Option<String>,
+    pub selected_backend_name: Option<String>,
+}
+
 pub fn build_dry_run_plan(
     manifest: &ProviderManifest,
     runtime_support: RuntimeSupportAssessment,
@@ -91,7 +97,24 @@ pub fn build_dry_run_plan_with_policy(
     guidance: IncidentGuidance,
     route_policy: RouteSelectionPolicy,
 ) -> SessionPlan {
-    let manifest_is_valid = validate_manifest(manifest).is_ok();
+    build_dry_run_plan_with_policy_and_overrides(
+        manifest,
+        runtime_support,
+        guidance,
+        route_policy,
+        DryRunOverrides::default(),
+    )
+}
+
+pub fn build_dry_run_plan_with_policy_and_overrides(
+    manifest: &ProviderManifest,
+    runtime_support: RuntimeSupportAssessment,
+    guidance: IncidentGuidance,
+    route_policy: RouteSelectionPolicy,
+    overrides: DryRunOverrides,
+) -> SessionPlan {
+    let filtered_manifest = apply_dry_run_overrides(manifest, &overrides);
+    let manifest_is_valid = validate_manifest(&filtered_manifest).is_ok();
     let policy_is_valid = validate_route_selection_policy(&route_policy).is_ok();
     let session_id = Uuid::new_v4();
     let adapter_context = AdapterContext {
@@ -107,8 +130,20 @@ pub fn build_dry_run_plan_with_policy(
         phase: SessionPhase::Loading,
         detail: "loaded dry-run manifest into core".to_string(),
     }];
+    if let Some(endpoint_id) = &overrides.selected_endpoint_id {
+        lifecycle.push(SessionEvent {
+            phase: SessionPhase::Loading,
+            detail: format!("applied endpoint override for '{endpoint_id}'"),
+        });
+    }
+    if let Some(backend_name) = &overrides.selected_backend_name {
+        lifecycle.push(SessionEvent {
+            phase: SessionPhase::Loading,
+            detail: format!("applied backend override for '{backend_name}'"),
+        });
+    }
     let route_selection = select_best_route(
-        manifest,
+        &filtered_manifest,
         &SelectionContext {
             client_platform: "linux".to_string(),
             last_known_good_endpoint_id: None,
@@ -166,10 +201,18 @@ pub fn build_dry_run_plan_with_policy(
             .map(|preflight| preflight.ready_for_dry_run_connect)
             .unwrap_or(false);
     let diagnostics_reason = format!(
-        "manifest_valid={} policy_valid={} backend_preflight_ready={} runtime_support={} guidance={}",
+        "manifest_valid={} policy_valid={} backend_preflight_ready={} endpoint_override={} backend_override={} runtime_support={} guidance={}",
         manifest_is_valid,
         policy_is_valid,
         backend_preflight_ready,
+        overrides
+            .selected_endpoint_id
+            .clone()
+            .unwrap_or_else(|| "none".to_string()),
+        overrides
+            .selected_backend_name
+            .clone()
+            .unwrap_or_else(|| "none".to_string()),
         runtime_support.tier,
         guidance.recommended_action
     );
@@ -220,7 +263,7 @@ pub fn build_dry_run_plan_with_policy(
         rejected_routes.clone(),
     );
     let adapter_compatibility = veil_diagnostics::build_adapter_compatibility_diagnostics(
-        manifest,
+        &filtered_manifest,
         &adapter_registry,
         selected_backend_name.as_deref(),
     );
@@ -230,7 +273,7 @@ pub fn build_dry_run_plan_with_policy(
     );
     let support_bundle = build_support_bundle(
         manifest_is_valid,
-        manifest,
+        &filtered_manifest,
         &adapter_registry,
         runtime_support,
         backend_preflight_diagnostics,
@@ -267,6 +310,27 @@ pub fn build_session_report(plan: &SessionPlan) -> SessionReport {
         incident_severity: plan.incident_report.severity.clone(),
         event_count: plan.lifecycle.len(),
     }
+}
+
+fn apply_dry_run_overrides(
+    manifest: &ProviderManifest,
+    overrides: &DryRunOverrides,
+) -> ProviderManifest {
+    let mut filtered_manifest = manifest.clone();
+
+    if let Some(endpoint_id) = &overrides.selected_endpoint_id {
+        filtered_manifest
+            .endpoints
+            .retain(|endpoint| &endpoint.id == endpoint_id);
+    }
+
+    if let Some(backend_name) = &overrides.selected_backend_name {
+        filtered_manifest.endpoints.retain(|endpoint| {
+            endpoint.dataplane.as_deref().unwrap_or("xray-core") == backend_name
+        });
+    }
+
+    filtered_manifest
 }
 
 fn build_backend_preflight_diagnostics_from_adapter(
@@ -306,6 +370,8 @@ mod tests {
         assert!(plan.diagnostics_reason.contains("manifest_valid=true"));
         assert!(plan.diagnostics_reason.contains("policy_valid=true"));
         assert!(plan.diagnostics_reason.contains("backend_preflight_ready=true"));
+        assert!(plan.diagnostics_reason.contains("endpoint_override=none"));
+        assert!(plan.diagnostics_reason.contains("backend_override=none"));
         assert!(plan.route_summary.contains("selected=edge-1"));
         assert!(!plan.fallback_triggered);
         assert!(plan.rejected_routes.is_empty());
@@ -406,5 +472,47 @@ mod tests {
                 .backend_name
                 == "mock-backend"
         );
+    }
+
+    #[test]
+    fn dry_run_plan_honors_backend_override() {
+        let manifest: ProviderManifest = demo_provider_manifest();
+
+        let plan = build_dry_run_plan_with_policy_and_overrides(
+            &manifest,
+            RuntimeSupportAssessment::mvp_supported(),
+            IncidentGuidance::default(),
+            RouteSelectionPolicy::default(),
+            DryRunOverrides {
+                selected_endpoint_id: None,
+                selected_backend_name: Some("mock-backend".to_string()),
+            },
+        );
+
+        assert_eq!(plan.outcome, SessionOutcome::ReadyToConnect);
+        assert_eq!(plan.selected_endpoint_id.as_deref(), Some("edge-mock-1"));
+        assert_eq!(plan.selected_backend_name.as_deref(), Some("mock-backend"));
+        assert!(plan.diagnostics_reason.contains("backend_override=mock-backend"));
+    }
+
+    #[test]
+    fn dry_run_plan_honors_endpoint_override() {
+        let manifest: ProviderManifest = demo_provider_manifest();
+
+        let plan = build_dry_run_plan_with_policy_and_overrides(
+            &manifest,
+            RuntimeSupportAssessment::mvp_supported(),
+            IncidentGuidance::default(),
+            RouteSelectionPolicy::default(),
+            DryRunOverrides {
+                selected_endpoint_id: Some("edge-mock-1".to_string()),
+                selected_backend_name: None,
+            },
+        );
+
+        assert_eq!(plan.outcome, SessionOutcome::ReadyToConnect);
+        assert_eq!(plan.selected_endpoint_id.as_deref(), Some("edge-mock-1"));
+        assert_eq!(plan.selected_backend_name.as_deref(), Some("mock-backend"));
+        assert!(plan.diagnostics_reason.contains("endpoint_override=edge-mock-1"));
     }
 }

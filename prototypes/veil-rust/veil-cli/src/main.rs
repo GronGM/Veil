@@ -4,7 +4,7 @@ use serde_json::to_string_pretty;
 use std::fs;
 use std::path::{Path, PathBuf};
 use veil_adapter_api::AdapterRegistrySnapshot;
-use veil_core::{build_dry_run_plan_with_policy, build_session_report};
+use veil_core::{build_dry_run_plan_with_policy_and_overrides, build_session_report, DryRunOverrides};
 use veil_diagnostics::{
     build_redacted_support_bundle, RedactedBackendPreflightDiagnostics,
     RedactedManifestDiagnostics, RedactedPolicyDiagnostics, RedactedRejectedRoute,
@@ -39,6 +39,10 @@ struct DemoArgs {
     export_redacted_preflight: Option<String>,
     #[arg(long = "policy-file")]
     policy_file: Option<String>,
+    #[arg(long = "select-endpoint")]
+    selected_endpoint_id: Option<String>,
+    #[arg(long = "select-backend")]
+    selected_backend_name: Option<String>,
     #[arg(long = "allow-backend")]
     allow_backends: Vec<String>,
     #[arg(long = "deny-backend")]
@@ -150,11 +154,12 @@ fn main() {
 fn run_demo(args: DemoArgs) -> Result<(), String> {
     let manifest = demo_provider_manifest();
     let policy = build_effective_policy(&args)?;
-    let plan = build_dry_run_plan_with_policy(
+    let plan = build_dry_run_plan_with_policy_and_overrides(
         &manifest,
         RuntimeSupportAssessment::mvp_supported(),
         IncidentGuidance::default(),
         policy.clone(),
+        build_dry_run_overrides(&args),
     );
     let report = build_session_report(&plan);
     let redacted_bundle = build_redacted_support_bundle(&plan.support_bundle);
@@ -264,6 +269,13 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn build_dry_run_overrides(args: &DemoArgs) -> DryRunOverrides {
+    DryRunOverrides {
+        selected_endpoint_id: args.selected_endpoint_id.clone(),
+        selected_backend_name: args.selected_backend_name.clone(),
+    }
 }
 
 fn export_redacted_bundle(path: &str, bundle: &RedactedSupportBundle) -> Result<(), String> {
@@ -665,6 +677,20 @@ mod tests {
         };
 
         assert!(args.raw_json);
+    }
+
+    #[test]
+    fn dry_run_overrides_pick_up_requested_endpoint_and_backend() {
+        let args = DemoArgs {
+            selected_endpoint_id: Some("edge-mock-1".to_string()),
+            selected_backend_name: Some("mock-backend".to_string()),
+            ..DemoArgs::default()
+        };
+
+        let overrides = build_dry_run_overrides(&args);
+
+        assert_eq!(overrides.selected_endpoint_id.as_deref(), Some("edge-mock-1"));
+        assert_eq!(overrides.selected_backend_name.as_deref(), Some("mock-backend"));
     }
 
     #[test]

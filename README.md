@@ -17,6 +17,7 @@ Current repository state:
 - the prototype now includes a second `mock-backend` adapter so the shared adapter API path is exercised across more than one backend
 - the adapter registry now exposes operator-facing capability metadata, and the CLI reports each backend's preflight, health, reload, typed-config, and dry-run-only flags
 - support bundles now also include manifest-vs-registry compatibility diagnostics, so dry-run can show advertised backends, locally registered backends, and any mismatch between them
+- the demo CLI now supports explicit `select-endpoint` and `select-backend` overrides, and those choices are carried into the dry-run plan rather than being handled only in the CLI layer
 - the project is intentionally control-plane first
 - dataplane backends are treated as replaceable adapters
 - Linux plus Xray is the first honest MVP runtime contour inherited from the GMvpn reference work

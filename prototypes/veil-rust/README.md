@@ -47,6 +47,7 @@ Recent prototype slice:
 - `veil-adapter-mock` now provides a second dry-run backend so route selection and adapter preflight can be exercised across multiple registered backends
 - adapter registry snapshots now include operator-facing capabilities so CLI output can show which backends support preflight, health checks, reload, typed config rendering, and dry-run-only execution
 - support bundles now include adapter compatibility diagnostics that compare manifest-advertised backends with the locally registered adapter set
+- `veil-cli demo` now supports explicit backend and endpoint selection overrides so dry-run can reproduce `xray-core`, `mock-backend`, or mismatch paths on demand
 
 Example policy files:
 
@@ -63,6 +64,8 @@ cargo run -p veil-cli -- demo --policy-file examples/policies/strict-fallback.js
 cargo run -p veil-cli -- demo --policy-file examples/policies/prefer-eu-stable.json --raw-json
 cargo run -p veil-cli -- demo --policy-file examples/policies/prefer-eu-stable.json --export-redacted-bundle output/demo-redacted-bundle.json
 cargo run -p veil-cli -- demo --export-redacted-preflight output/demo-redacted-preflight.json
+cargo run -p veil-cli -- demo --select-backend mock-backend
+cargo run -p veil-cli -- demo --select-endpoint edge-1
 ```
 
 Validation commands once Rust toolchain is available:
