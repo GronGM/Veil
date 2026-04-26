@@ -3,6 +3,7 @@ members = [
   "veil-core",
   "veil-adapter-api",
   "veil-adapter-xray",
+  "veil-adapter-mock",
   "veil-manifest",
   "veil-policy",
   "veil-routing",
