@@ -15,9 +15,11 @@ It now provides:
 - minimal placeholder types and entrypoints
 - an initial end-to-end dry-run path from `veil-cli` through `veil-core` into backend adapters
 - typed manifest input and a first policy-aware decision summary in the dry-run report
+- adapter capability snapshots surfaced in both report and diagnostics output
 - a redacted diagnostics view produced by `veil-diagnostics`
 - a structured JSON-like diagnostics artifact for machine-readable inspection
 - simple `policy-mismatch` and `mock-backend` CLI scenarios
+- a first small unit-test layer for policy and backend selection behavior
 
 It does not yet claim:
 
@@ -45,8 +47,8 @@ The current public dry-run slice is intentionally simple:
 
 - `veil-manifest` provides a typed demo manifest input
 - `veil-policy` evaluates a minimal backend allow rule and a `policy-mismatch` scenario
-- `veil-adapter-api` defines a minimal `DryRunPlan`
-- `veil-adapter-xray` and `veil-adapter-mock` provide two backend choices
+- `veil-adapter-api` defines a minimal `DryRunPlan` and `AdapterCapabilities`
+- `veil-adapter-xray` and `veil-adapter-mock` provide two backend choices with different capabilities
 - `veil-core` turns those inputs into a control-plane `DryRunReport`
 - `veil-diagnostics` builds a redacted support-facing view and a JSON-like artifact
 - `veil-cli` prints the control-plane report, the redacted diagnostics block, and the structured artifact
