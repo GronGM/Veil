@@ -1,0 +1,5 @@
+[package]
+name = "veil-cli"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
