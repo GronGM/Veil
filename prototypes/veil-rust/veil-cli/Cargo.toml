@@ -7,3 +7,5 @@ version.workspace = true
 [dependencies]
 veil-core = { path = "../veil-core" }
 veil-adapter-xray = { path = "../veil-adapter-xray" }
+veil-manifest = { path = "../veil-manifest" }
+veil-policy = { path = "../veil-policy" }
