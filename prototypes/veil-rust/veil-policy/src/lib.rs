@@ -352,12 +352,11 @@ impl RoutePolicy {
             return RuntimeSupportAssessment {
                 tier: RuntimeSupportTier::ContractMismatch,
                 reason: RuntimeSupportReason::ManifestContractMismatch,
-                summary:
-                    concat!(
-                        "selected linux xray contour matches the repository MVP target, ",
-                        "but the manifest contract does not declare the same contour"
-                    )
-                    .to_string(),
+                summary: concat!(
+                    "selected linux xray contour matches the repository MVP target, ",
+                    "but the manifest contract does not declare the same contour"
+                )
+                .to_string(),
                 in_mvp_scope: false,
                 caveats,
             };
@@ -370,12 +369,11 @@ impl RoutePolicy {
                 return RuntimeSupportAssessment {
                     tier: RuntimeSupportTier::ContractMismatch,
                     reason: RuntimeSupportReason::ManifestContractMismatch,
-                    summary:
-                        concat!(
-                            "selected linux contour does not match the manifest-declared ",
-                            "support contract"
-                        )
-                        .to_string(),
+                    summary: concat!(
+                        "selected linux contour does not match the manifest-declared ",
+                        "support contract"
+                    )
+                    .to_string(),
                     in_mvp_scope: false,
                     caveats,
                 };
@@ -384,12 +382,11 @@ impl RoutePolicy {
             return RuntimeSupportAssessment {
                 tier: RuntimeSupportTier::FoundationOnly,
                 reason: RuntimeSupportReason::LinuxNonMvpContour,
-                summary:
-                    concat!(
-                        "linux remains the reference runtime, but this contour is outside ",
-                        "the first MVP target"
-                    )
-                    .to_string(),
+                summary: concat!(
+                    "linux remains the reference runtime, but this contour is outside ",
+                    "the first MVP target"
+                )
+                .to_string(),
                 in_mvp_scope: false,
                 caveats: vec![
                     "the first MVP target is the explicit linux + xray-core contour".to_string(),
@@ -420,12 +417,11 @@ impl RoutePolicy {
                 } else {
                     RuntimeSupportReason::ManifestContractMismatch
                 },
-                summary:
-                    concat!(
-                        "ios remains on a bridge-oriented contract path and is outside ",
-                        "the first MVP runtime target"
-                    )
-                    .to_string(),
+                summary: concat!(
+                    "ios remains on a bridge-oriented contract path and is outside ",
+                    "the first MVP runtime target"
+                )
+                .to_string(),
                 in_mvp_scope: false,
                 caveats,
             };
@@ -446,12 +442,11 @@ impl RoutePolicy {
                 } else {
                     RuntimeSupportReason::ManifestContractMismatch
                 },
-                summary:
-                    concat!(
-                        "this runtime contour follows the shared product model but remains ",
-                        "outside the first hardened MVP target"
-                    )
-                    .to_string(),
+                summary: concat!(
+                    "this runtime contour follows the shared product model but remains ",
+                    "outside the first hardened MVP target"
+                )
+                .to_string(),
                 in_mvp_scope: false,
                 caveats,
             };
@@ -468,12 +463,11 @@ impl RoutePolicy {
             } else {
                 RuntimeSupportReason::ManifestContractMismatch
             },
-            summary:
-                concat!(
-                    "this runtime contour is intended for modeling and local experimentation ",
-                    "rather than MVP claims"
-                )
-                .to_string(),
+            summary: concat!(
+                "this runtime contour is intended for modeling and local experimentation ",
+                "rather than MVP claims"
+            )
+            .to_string(),
             in_mvp_scope: false,
             caveats,
         }
@@ -492,7 +486,9 @@ mod tests {
 
         assert!(decision.allowed);
         assert_eq!(decision.reason, BackendPolicyReason::PreferredAllowed);
-        assert!(decision.summary.contains("policy allows backend 'xray-core'"));
+        assert!(decision
+            .summary
+            .contains("policy allows backend 'xray-core'"));
     }
 
     #[test]
@@ -503,7 +499,9 @@ mod tests {
 
         assert!(!decision.allowed);
         assert_eq!(decision.reason, BackendPolicyReason::BlockedByAllowlist);
-        assert!(decision.summary.contains("policy blocks backend 'xray-core'"));
+        assert!(decision
+            .summary
+            .contains("policy blocks backend 'xray-core'"));
         assert!(decision.summary.contains("only 'mock-backend' is allowed"));
     }
 
@@ -516,7 +514,9 @@ mod tests {
         assert!(decision.allowed);
         assert_eq!(decision.transport_profile, TransportProfile::TlsTcp);
         assert_eq!(decision.reason, TransportPolicyReason::PreferredAllowed);
-        assert!(decision.summary.contains("policy allows transport 'tls-tcp'"));
+        assert!(decision
+            .summary
+            .contains("policy allows transport 'tls-tcp'"));
     }
 
     #[test]

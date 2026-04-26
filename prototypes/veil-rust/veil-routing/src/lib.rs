@@ -42,7 +42,10 @@ pub fn select_backend(
 ) -> Option<BackendSelection> {
     let preferred = candidates
         .iter()
-        .find(|candidate| candidate.backend_name == manifest.preferred_backend && candidate.backend_name == policy.allow_backend)
+        .find(|candidate| {
+            candidate.backend_name == manifest.preferred_backend
+                && candidate.backend_name == policy.allow_backend
+        })
         .or_else(|| {
             candidates
                 .iter()
@@ -213,13 +216,19 @@ mod tests {
         let manifest = ProviderManifest::demo();
         let policy = RoutePolicy::demo();
         let candidates = [
-            BackendCandidate { backend_name: "xray-core" },
-            BackendCandidate { backend_name: "mock-backend" },
+            BackendCandidate {
+                backend_name: "xray-core",
+            },
+            BackendCandidate {
+                backend_name: "mock-backend",
+            },
         ];
 
         let selection = select_backend(&candidates, &manifest, &policy).expect("selection");
         assert_eq!(selection.backend_name, "xray-core");
-        assert!(selection.summary.contains("routing selected preferred backend 'xray-core'"));
+        assert!(selection
+            .summary
+            .contains("routing selected preferred backend 'xray-core'"));
     }
 
     #[test]
@@ -227,13 +236,19 @@ mod tests {
         let manifest = ProviderManifest::demo();
         let policy = RoutePolicy::mismatch_demo();
         let candidates = [
-            BackendCandidate { backend_name: "xray-core" },
-            BackendCandidate { backend_name: "mock-backend" },
+            BackendCandidate {
+                backend_name: "xray-core",
+            },
+            BackendCandidate {
+                backend_name: "mock-backend",
+            },
         ];
 
         let selection = select_backend(&candidates, &manifest, &policy).expect("selection");
         assert_eq!(selection.backend_name, "mock-backend");
-        assert!(selection.summary.contains("policy requires it instead of preferred 'xray-core'"));
+        assert!(selection
+            .summary
+            .contains("policy requires it instead of preferred 'xray-core'"));
     }
 
     #[test]
@@ -241,8 +256,12 @@ mod tests {
         let manifest = ProviderManifest::demo();
         let policy = RoutePolicy::demo();
         let candidates = [
-            BackendCandidate { backend_name: "xray-core" },
-            BackendCandidate { backend_name: "mock-backend" },
+            BackendCandidate {
+                backend_name: "xray-core",
+            },
+            BackendCandidate {
+                backend_name: "mock-backend",
+            },
         ];
         let eligibility = [
             BackendEligibility {
@@ -255,12 +274,16 @@ mod tests {
             },
         ];
 
-        let result = select_backend_with_eligibility(&candidates, &manifest, &policy, &eligibility);
+        let result =
+            select_backend_with_eligibility(&candidates, &manifest, &policy, &eligibility);
         assert_eq!(result.candidates.len(), 2);
         let selection = result.selection.expect("selection");
         assert_eq!(selection.backend_name, "xray-core");
         assert!(result.summary.contains("accepted backend 'xray-core'"));
-        assert_eq!(result.candidates[0].reason, RoutingEligibilityReason::Eligible);
+        assert_eq!(
+            result.candidates[0].reason,
+            RoutingEligibilityReason::Eligible
+        );
     }
 
     #[test]
@@ -268,8 +291,12 @@ mod tests {
         let manifest = ProviderManifest::demo();
         let policy = RoutePolicy::mismatch_demo();
         let candidates = [
-            BackendCandidate { backend_name: "xray-core" },
-            BackendCandidate { backend_name: "mock-backend" },
+            BackendCandidate {
+                backend_name: "xray-core",
+            },
+            BackendCandidate {
+                backend_name: "mock-backend",
+            },
         ];
         let eligibility = [
             BackendEligibility {
@@ -282,12 +309,19 @@ mod tests {
             },
         ];
 
-        let result = select_backend_with_eligibility(&candidates, &manifest, &policy, &eligibility);
+        let result =
+            select_backend_with_eligibility(&candidates, &manifest, &policy, &eligibility);
         assert!(result.selection.is_none());
         assert!(result.summary.contains("rejected backend 'mock-backend'"));
         assert!(result.summary.contains("blocked_by_adapter"));
-        assert_eq!(result.candidates[1].reason, RoutingEligibilityReason::RejectedByOutcome);
-        assert_eq!(result.candidates[0].reason, RoutingEligibilityReason::NotSelectedByPolicy);
+        assert_eq!(
+            result.candidates[1].reason,
+            RoutingEligibilityReason::RejectedByOutcome
+        );
+        assert_eq!(
+            result.candidates[0].reason,
+            RoutingEligibilityReason::NotSelectedByPolicy
+        );
     }
 
     #[test]
@@ -295,16 +329,24 @@ mod tests {
         let manifest = ProviderManifest::demo();
         let policy = RoutePolicy::demo();
         let candidates = [
-            BackendCandidate { backend_name: "xray-core" },
-            BackendCandidate { backend_name: "mock-backend" },
+            BackendCandidate {
+                backend_name: "xray-core",
+            },
+            BackendCandidate {
+                backend_name: "mock-backend",
+            },
         ];
         let eligibility = [BackendEligibility {
             backend_name: "mock-backend",
             outcome: DryRunOutcome::Allowed,
         }];
 
-        let result = select_backend_with_eligibility(&candidates, &manifest, &policy, &eligibility);
+        let result =
+            select_backend_with_eligibility(&candidates, &manifest, &policy, &eligibility);
         assert!(result.selection.is_none());
-        assert_eq!(result.candidates[0].reason, RoutingEligibilityReason::MissingEligibility);
+        assert_eq!(
+            result.candidates[0].reason,
+            RoutingEligibilityReason::MissingEligibility
+        );
     }
 }
