@@ -6,13 +6,14 @@ Its purpose is to make the intended module boundaries visible on the public bran
 
 ## Current Status
 
-This workspace is intentionally minimal.
+This workspace is intentionally small, but it is no longer only a static directory layout.
 
-It provides:
+It now provides:
 
 - a Cargo workspace root
 - initial crate boundaries that match the public architecture docs
 - minimal placeholder types and entrypoints
+- an initial end-to-end dry-run path from `veil-cli` through `veil-core` into `veil-adapter-xray`
 
 It does not yet claim:
 
@@ -20,7 +21,7 @@ It does not yet claim:
 - production readiness
 - real backend integration
 - real manifest verification
-- real routing or diagnostics behavior
+- real routing or diagnostics behavior beyond the first dry-run report path
 
 ## Current Crates
 
@@ -32,6 +33,17 @@ It does not yet claim:
 - `veil-routing`
 - `veil-diagnostics`
 - `veil-cli`
+
+## Current Dry-Run Shape
+
+The current public dry-run slice is intentionally simple:
+
+- `veil-adapter-api` defines a minimal `DryRunPlan`
+- `veil-adapter-xray` returns a placeholder Xray dry-run plan
+- `veil-core` turns that plan into a control-plane `DryRunReport`
+- `veil-cli` prints the rendered report
+
+This is meant to prove crate wiring and ownership boundaries before broader behavior lands.
 
 ## Validation
 
@@ -45,4 +57,4 @@ cargo test --workspace
 
 ## Next Steps
 
-The next reviewable slices should wire these crates together gradually instead of landing a broad rewrite in one jump.
+The next reviewable slices should add typed manifest input, policy-aware dry-run context, and richer diagnostics without landing a broad rewrite in one jump.
