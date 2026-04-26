@@ -26,7 +26,16 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    Demo(DemoArgs),
+    Demo {
+        #[command(subcommand)]
+        command: Option<DemoCommand>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum DemoCommand {
+    Run(DemoArgs),
+    Matrix(MatrixArgs),
 }
 
 #[derive(Debug, Args, Default)]
@@ -67,6 +76,12 @@ struct DemoArgs {
     strict_fallback: bool,
     #[arg(long = "route-preference", value_enum)]
     route_preference: Option<RoutePreferenceArg>,
+}
+
+#[derive(Debug, Args, Default)]
+struct MatrixArgs {
+    #[arg(long = "raw-json")]
+    raw_json: bool,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -143,14 +158,26 @@ struct PartialRouteSelectionPolicy {
 fn main() {
     let cli = Cli::parse();
 
-    let result = match cli.command.unwrap_or(Commands::Demo(DemoArgs::default())) {
-        Commands::Demo(args) => run_demo(args),
+    let result = match cli.command.unwrap_or(Commands::Demo {
+        command: Some(DemoCommand::Run(DemoArgs::default())),
+    }) {
+        Commands::Demo { command } => match command.unwrap_or(DemoCommand::Run(DemoArgs::default())) {
+            DemoCommand::Run(args) => run_demo(args),
+            DemoCommand::Matrix(args) => run_demo_matrix(args),
+        },
     };
 
     if let Err(error) = result {
         eprintln!("error={error}");
         std::process::exit(2);
     }
+}
+
+#[derive(Debug, Clone)]
+struct DemoMatrixScenario {
+    name: &'static str,
+    description: &'static str,
+    args: DemoArgs,
 }
 
 fn run_demo(args: DemoArgs) -> Result<(), String> {
@@ -272,6 +299,100 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn run_demo_matrix(args: MatrixArgs) -> Result<(), String> {
+    let scenarios = demo_matrix_scenarios();
+    println!("demo_matrix_scenarios={}", scenarios.len());
+
+    for scenario in scenarios {
+        let manifest = demo_provider_manifest();
+        let policy = build_effective_policy(&scenario.args)?;
+        let overrides = build_dry_run_overrides(&scenario.args);
+        let plan = build_dry_run_plan_with_policy_and_overrides(
+            &manifest,
+            RuntimeSupportAssessment::mvp_supported(),
+            IncidentGuidance::default(),
+            policy,
+            overrides.clone(),
+        );
+
+        println!("scenario={} description={}", scenario.name, scenario.description);
+        println!("  overrides={}", summarize_applied_overrides(&overrides));
+        println!("  result={}", summarize_matrix_result(&plan));
+
+        if args.raw_json {
+            println!(
+                "  support_bundle={}",
+                to_string_pretty(&plan.support_bundle).unwrap_or_else(|_| "{}".to_string())
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn demo_matrix_scenarios() -> Vec<DemoMatrixScenario> {
+    vec![
+        DemoMatrixScenario {
+            name: "baseline",
+            description: "default dry-run path selects the preferred xray backend",
+            args: DemoArgs::default(),
+        },
+        DemoMatrixScenario {
+            name: "mock_backend_selected",
+            description: "forced backend override drives selection into the mock backend path",
+            args: DemoArgs {
+                selected_backend_name: Some("mock-backend".to_string()),
+                ..DemoArgs::default()
+            },
+        },
+        DemoMatrixScenario {
+            name: "endpoint_override",
+            description: "forced endpoint override drives selection into the mock endpoint path",
+            args: DemoArgs {
+                selected_endpoint_id: Some("edge-mock-1".to_string()),
+                ..DemoArgs::default()
+            },
+        },
+        DemoMatrixScenario {
+            name: "forced_registry_mismatch",
+            description: "selected xray backend is hidden from the local registry to trigger compatibility mismatch",
+            args: DemoArgs {
+                selected_backend_name: Some("xray-core".to_string()),
+                disabled_registered_backends: vec!["xray-core".to_string()],
+                ..DemoArgs::default()
+            },
+        },
+    ]
+}
+
+fn summarize_matrix_result(plan: &veil_core::SessionPlan) -> String {
+    let selected_endpoint = plan
+        .selected_endpoint_id
+        .clone()
+        .unwrap_or_else(|| "none".to_string());
+    let selected_backend = plan
+        .selected_backend_name
+        .clone()
+        .unwrap_or_else(|| "none".to_string());
+    let preflight_ready = plan
+        .support_bundle
+        .backend_preflight_diagnostics
+        .as_ref()
+        .map(|preflight| preflight.ready_for_dry_run_connect)
+        .unwrap_or(false);
+    format!(
+        "outcome={:?} selected_endpoint={} selected_backend={} compatibility_ok={} preflight_ready={} rejected_routes={}",
+        plan.outcome,
+        selected_endpoint,
+        selected_backend,
+        plan.support_bundle
+            .adapter_compatibility_diagnostics
+            .compatibility_ok,
+        preflight_ready,
+        plan.rejected_routes.len()
+    )
 }
 
 fn build_dry_run_overrides(args: &DemoArgs) -> DryRunOverrides {
@@ -723,6 +844,17 @@ mod tests {
     }
 
     #[test]
+    fn demo_matrix_contains_expected_named_scenarios() {
+        let scenarios = demo_matrix_scenarios();
+        let names = scenarios.iter().map(|scenario| scenario.name).collect::<Vec<_>>();
+
+        assert!(names.contains(&"baseline"));
+        assert!(names.contains(&"mock_backend_selected"));
+        assert!(names.contains(&"endpoint_override"));
+        assert!(names.contains(&"forced_registry_mismatch"));
+    }
+
+    #[test]
     fn export_redacted_bundle_writes_json_file() {
         let temp_dir = std::env::temp_dir().join("veil-cli-export-test");
         let output_path = temp_dir.join("bundle.json");
@@ -1080,5 +1212,28 @@ mod tests {
         assert!(summary.contains("endpoint=edge-mock-1"));
         assert!(summary.contains("backend=mock-backend"));
         assert!(summary.contains("disabled_registered_backends=xray-core"));
+    }
+
+    #[test]
+    fn matrix_result_summary_mentions_compatibility_and_preflight() {
+        let manifest = demo_provider_manifest();
+        let plan = build_dry_run_plan_with_policy_and_overrides(
+            &manifest,
+            RuntimeSupportAssessment::mvp_supported(),
+            IncidentGuidance::default(),
+            RouteSelectionPolicy::default(),
+            DryRunOverrides {
+                selected_endpoint_id: None,
+                selected_backend_name: Some("mock-backend".to_string()),
+                disabled_registered_backends: Vec::new(),
+            },
+        );
+
+        let summary = summarize_matrix_result(&plan);
+
+        assert!(summary.contains("outcome=ReadyToConnect"));
+        assert!(summary.contains("selected_backend=mock-backend"));
+        assert!(summary.contains("compatibility_ok=true"));
+        assert!(summary.contains("preflight_ready=true"));
     }
 }
