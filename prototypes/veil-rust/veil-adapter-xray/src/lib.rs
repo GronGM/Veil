@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, to_value};
 use std::path::Path;
 use veil_adapter_api::{
-    AdapterContext, AdapterError, AdapterMetadata, DataplaneBackend, GeneratedConfig, HealthStatus,
-    RuntimeSnapshot,
+    AdapterContext, AdapterError, AdapterMetadata, DataplaneBackend, DryRunCommandSpec,
+    DryRunPreflight, GeneratedConfig, HealthStatus, RuntimeSnapshot,
 };
 use veil_manifest::{Endpoint, XrayEndpointMetadata};
 
@@ -49,21 +49,6 @@ pub struct XrayOutboundSettings {
 pub struct XrayStreamSettings {
     pub network: String,
     pub security: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct XrayCommandSpec {
-    pub program: String,
-    pub args: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct XrayDryRunPreflight {
-    pub binary_path: String,
-    pub config_path: String,
-    pub binary_present: bool,
-    pub command: XrayCommandSpec,
-    pub rendered_config: XrayRenderedConfig,
 }
 
 #[derive(Debug, Default)]
@@ -118,8 +103,8 @@ impl XrayDryRunBackend {
         })
     }
 
-    pub fn build_command(binary_path: &str, config_path: &str) -> XrayCommandSpec {
-        XrayCommandSpec {
+    pub fn build_command(binary_path: &str, config_path: &str) -> DryRunCommandSpec {
+        DryRunCommandSpec {
             program: binary_path.to_string(),
             args: vec!["run".to_string(), "-config".to_string(), config_path.to_string()],
         }
@@ -129,14 +114,23 @@ impl XrayDryRunBackend {
         endpoint: &Endpoint,
         binary_path: &str,
         config_path: &str,
-    ) -> Result<XrayDryRunPreflight, AdapterError> {
+    ) -> Result<DryRunPreflight, AdapterError> {
         let rendered_config = Self::render_config(endpoint)?;
-        Ok(XrayDryRunPreflight {
+        let binary_present = Path::new(binary_path).exists();
+        Ok(DryRunPreflight {
+            backend_name: "xray-core".to_string(),
+            ready_for_dry_run_connect: true,
             binary_path: binary_path.to_string(),
             config_path: config_path.to_string(),
-            binary_present: Path::new(binary_path).exists(),
+            binary_present,
+            readiness_note: if binary_present {
+                "typed xray config rendered and dry-run command prepared".to_string()
+            } else {
+                "typed xray config rendered and dry-run command prepared; xray binary was not found in the current environment".to_string()
+            },
             command: Self::build_command(binary_path, config_path),
-            rendered_config,
+            rendered_config: to_value(rendered_config)
+                .map_err(|error| AdapterError::InvalidConfig(error.to_string()))?,
         })
     }
 }
@@ -163,17 +157,25 @@ impl DataplaneBackend for XrayDryRunBackend {
         Ok(())
     }
 
+    fn build_dry_run_preflight(
+        &self,
+        endpoint: &Endpoint,
+        context: &AdapterContext,
+    ) -> Result<DryRunPreflight, AdapterError> {
+        Self::build_dry_run_preflight(
+            endpoint,
+            "xray",
+            &format!("runtime/{}.json", context.session_id),
+        )
+    }
+
     fn apply_config(
         &self,
         endpoint: &Endpoint,
         context: &AdapterContext,
     ) -> Result<GeneratedConfig, AdapterError> {
         let rendered_config = Self::render_config(endpoint)?;
-        let preflight = Self::build_dry_run_preflight(
-            endpoint,
-            "xray",
-            &format!("runtime/{}.json", context.session_id),
-        )?;
+        let preflight = DataplaneBackend::build_dry_run_preflight(self, endpoint, context)?;
 
         Ok(GeneratedConfig {
             backend_name: self.backend_name().to_string(),
@@ -292,7 +294,7 @@ mod tests {
 
         assert!(!preflight.binary_present);
         assert_eq!(preflight.command.program, "/definitely/not/xray");
-        assert_eq!(preflight.rendered_config.outbounds[0].tag, "edge-1");
+        assert_eq!(preflight.rendered_config["outbounds"][0]["tag"], "edge-1");
     }
 
     #[test]
@@ -331,11 +333,24 @@ mod tests {
         let mut registry = StaticAdapterRegistry::new();
         registry.register(Box::new(XrayDryRunBackend));
 
+        let endpoint = demo_endpoint();
         let backend_name = registry
-            .resolve_backend_name_for_endpoint(&demo_endpoint())
+            .resolve_backend_name_for_endpoint(&endpoint)
             .expect("xray backend should resolve");
+        let backend = registry
+            .resolve_backend_for_endpoint(&endpoint)
+            .expect("xray backend instance should resolve");
+        let context = AdapterContext {
+            client_platform: "linux".to_string(),
+            dry_run: true,
+            session_id: "session-1".to_string(),
+        };
+        let preflight = backend
+            .build_dry_run_preflight(&endpoint, &context)
+            .expect("trait preflight should build");
 
         assert_eq!(backend_name, "xray-core");
+        assert_eq!(preflight.backend_name, "xray-core");
     }
 
     #[test]

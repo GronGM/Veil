@@ -1,7 +1,6 @@
 //! Minimal control-plane skeleton for Veil.
 
 use serde::{Deserialize, Serialize};
-use serde_json::to_value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 use veil_adapter_api::{AdapterContext, AdapterRegistrySnapshot, StaticAdapterRegistry};
@@ -134,11 +133,15 @@ pub fn build_dry_run_plan_with_policy(
         .as_ref()
         .ok()
         .and_then(|selection| {
-            if selected_backend_name.as_deref() == Some("xray-core") {
-                build_xray_backend_preflight(&selection.selected.endpoint, &adapter_context).ok()
-            } else {
-                None
-            }
+            registry
+                .resolve_backend_for_endpoint(&selection.selected.endpoint)
+                .ok()
+                .and_then(|backend| {
+                    backend
+                        .build_dry_run_preflight(&selection.selected.endpoint, &adapter_context)
+                        .ok()
+                })
+                .map(build_backend_preflight_diagnostics_from_adapter)
         });
     if let Some(backend_name) = &selected_backend_name {
         lifecycle.push(SessionEvent {
@@ -254,31 +257,19 @@ pub fn build_session_report(plan: &SessionPlan) -> SessionReport {
     }
 }
 
-fn build_xray_backend_preflight(
-    endpoint: &veil_manifest::Endpoint,
-    adapter_context: &AdapterContext,
-) -> Result<BackendPreflightDiagnostics, veil_adapter_api::AdapterError> {
-    let preflight = XrayDryRunBackend::build_dry_run_preflight(
-        endpoint,
-        "xray",
-        &format!("runtime/{}.json", adapter_context.session_id),
-    )?;
-
-    Ok(build_backend_preflight_diagnostics(
-        "xray-core",
+fn build_backend_preflight_diagnostics_from_adapter(
+    preflight: veil_adapter_api::DryRunPreflight,
+) -> BackendPreflightDiagnostics {
+    build_backend_preflight_diagnostics(
+        preflight.backend_name,
         preflight.binary_path,
         preflight.config_path,
         preflight.binary_present,
-        if preflight.binary_present {
-            "typed xray config rendered and dry-run command prepared"
-        } else {
-            "typed xray config rendered and dry-run command prepared; xray binary was not found in the current environment"
-        },
+        preflight.readiness_note,
         preflight.command.program,
         preflight.command.args,
-        to_value(preflight.rendered_config)
-            .map_err(|error| veil_adapter_api::AdapterError::InvalidConfig(error.to_string()))?,
-    ))
+        preflight.rendered_config,
+    )
 }
 
 #[cfg(test)]

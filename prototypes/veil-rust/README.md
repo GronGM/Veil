@@ -42,6 +42,7 @@ Recent prototype slice:
 - `veil-cli demo --export-redacted-bundle <path>` now writes a redacted diagnostics artifact to disk for later review or attachment
 - `veil-adapter-xray` now renders a typed Xray-like config model, builds a separate command spec, and reports dry-run preflight details without requiring a real `xray` binary
 - `veil-core` now carries backend preflight details into the dry-run plan, and `veil-cli demo --export-redacted-preflight <path>` can write a standalone safe artifact for review
+- `veil-adapter-api` now defines the generic dry-run preflight contract, so future adapters can plug into the same control-plane path without backend-specific branching in `veil-core`
 
 Example policy files:
 

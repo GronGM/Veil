@@ -179,7 +179,7 @@ Reference mapping from GMvpn:
 - Public Interfaces: `DataplaneBackend`, `TransportAdapter`, `EndpointProvider`, `HealthProbe`, `PolicyEvaluator`.
 - Dependencies: shared model types only; no direct dependency on a concrete backend.
 - Hot-swappable Parts: all backend and transport implementations.
-- MVP Scope: static registration, lifecycle methods `init`, `apply_config`, `start`, `health_check`, `reload`, `stop`, `runtime_snapshot`.
+- MVP Scope: static registration, lifecycle methods `init`, `build_dry_run_preflight`, `apply_config`, `start`, `health_check`, `reload`, `stop`, `runtime_snapshot`.
 - v1 Scope: version compatibility metadata and stronger capability negotiation.
 - v2/Research Scope: sandboxed or separately isolated plugin processes.
 - Failure Modes: partially applied config, health-check contract mismatch, adapter reporting incomplete runtime state.
@@ -204,7 +204,7 @@ Reference mapping from GMvpn:
 - Responsibility: provide local operator entrypoints for dry-run, runtime startup, support-bundle export, and guardrail-friendly validation.
 - Inputs: manifest paths, public keys, local override files, runtime flags, cache/state paths.
 - Outputs: human-readable execution summary, support bundle, exit code, validation failures.
-- Public Interfaces: command-line commands, dry-run/reporting output, local validation subcommands.
+- Public Interfaces: command-line commands, dry-run/reporting output, backend preflight export, local validation subcommands.
 - Dependencies: every core module, but no backend-specific logic beyond adapter selection.
 - Hot-swappable Parts: output formatters and command surface can evolve independently of control-plane logic.
 - MVP Scope: dry-run and report-focused local CLI with safe redacted output by default, file-based policy overrides, backend preflight visibility, standalone redacted preflight export, and explicit opt-in raw JSON output for deeper debugging.

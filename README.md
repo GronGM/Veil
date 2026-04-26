@@ -13,6 +13,7 @@ Current repository state:
 - the prototype CLI now defaults to a report-focused redacted output, with raw bundle JSON available behind an explicit flag
 - the Xray adapter prototype now renders typed Xray-like config, exposes a dry-run preflight report, and keeps command building separate from lifecycle behavior
 - the control-plane dry-run plan now includes backend preflight diagnostics, and the CLI can export a standalone redacted preflight artifact
+- the adapter API now owns the generic dry-run preflight contract, so `veil-core` no longer hardcodes Xray-specific preflight wiring
 - the project is intentionally control-plane first
 - dataplane backends are treated as replaceable adapters
 - Linux plus Xray is the first honest MVP runtime contour inherited from the GMvpn reference work
