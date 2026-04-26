@@ -46,6 +46,7 @@ Recent prototype slice:
 - `veil-adapter-api` now defines the generic dry-run preflight contract, so future adapters can plug into the same control-plane path without backend-specific branching in `veil-core`
 - `veil-adapter-mock` now provides a second dry-run backend so route selection and adapter preflight can be exercised across multiple registered backends
 - adapter registry snapshots now include operator-facing capabilities so CLI output can show which backends support preflight, health checks, reload, typed config rendering, and dry-run-only execution
+- support bundles now include adapter compatibility diagnostics that compare manifest-advertised backends with the locally registered adapter set
 
 Example policy files:
 

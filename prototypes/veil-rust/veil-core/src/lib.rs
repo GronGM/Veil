@@ -219,9 +219,19 @@ pub fn build_dry_run_plan_with_policy(
         fallback_triggered,
         rejected_routes.clone(),
     );
+    let adapter_compatibility = veil_diagnostics::build_adapter_compatibility_diagnostics(
+        manifest,
+        &adapter_registry,
+        selected_backend_name.as_deref(),
+    );
+    let diagnostics_reason = format!(
+        "{} adapter_compatibility_ok={}",
+        diagnostics_reason, adapter_compatibility.compatibility_ok
+    );
     let support_bundle = build_support_bundle(
         manifest_is_valid,
         manifest,
+        &adapter_registry,
         runtime_support,
         backend_preflight_diagnostics,
         route_diagnostics,

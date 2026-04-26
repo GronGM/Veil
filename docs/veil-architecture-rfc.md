@@ -159,13 +159,13 @@ Reference mapping from GMvpn:
 
 ### `veil-diagnostics`
 
-- Responsibility: generate incident summaries, redact support bundles, expose explainable route and runtime decisions, and preserve release-facing operator evidence.
+- Responsibility: generate incident summaries, redact support bundles, expose explainable route and runtime decisions, and preserve release-facing operator evidence including manifest-vs-registry compatibility.
 - Inputs: session reports, route selection breakdowns, adapter runtime snapshots, local incident flags, recovery reports.
 - Outputs: support bundle payloads, incident narratives, telemetry-safe records, operator summaries.
 - Public Interfaces: `IncidentReporter`, `SupportBundleExporter`, `RedactionPolicy`.
 - Dependencies: `veil-core`, `veil-routing`, `veil-policy`, `veil-adapter-api`.
 - Hot-swappable Parts: storage/export target may vary; redaction policy remains core-owned.
-- MVP Scope: support bundle and incident summary parity with the GMvpn reference semantics, plus redacted manifest, route, policy, and backend-preflight diagnostics views that are safe to show in local CLI output by default.
+- MVP Scope: support bundle and incident summary parity with the GMvpn reference semantics, plus redacted manifest, route, policy, backend-preflight, and adapter-compatibility diagnostics views that are safe to show in local CLI output by default.
 - v1 Scope: bounded structured diagnostics packs and better correlation IDs.
 - v2/Research Scope: fleet-facing aggregation or external support integrations.
 - Failure Modes: leaking sensitive fields, drift between CLI output and bundle contents, truncated evidence hiding cause of failure.

@@ -161,6 +161,7 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
     let summary = build_compact_diagnostics_summary(
         &plan.support_bundle.redacted_manifest_diagnostics,
         &plan.adapter_registry,
+        &plan.support_bundle.adapter_compatibility_diagnostics.summary,
         plan.support_bundle
             .redacted_backend_preflight_diagnostics
             .as_ref(),
@@ -202,6 +203,10 @@ fn run_demo(args: DemoArgs) -> Result<(), String> {
     println!(
         "adapter_registry_summary={}",
         summarize_adapter_registry(&plan.adapter_registry)
+    );
+    println!(
+        "adapter_compatibility_summary={}",
+        plan.support_bundle.adapter_compatibility_diagnostics.summary
     );
     if let Some(path) = &args.export_redacted_bundle {
         export_redacted_bundle(path, &redacted_bundle)?;
@@ -321,6 +326,7 @@ fn export_redacted_preflight(
 fn build_compact_diagnostics_summary(
     manifest: &RedactedManifestDiagnostics,
     adapter_registry: &AdapterRegistrySnapshot,
+    adapter_compatibility_summary: &str,
     backend_preflight: Option<&RedactedBackendPreflightDiagnostics>,
     route: &RedactedRouteDiagnostics,
     policy: &RedactedPolicyDiagnostics,
@@ -359,6 +365,10 @@ fn build_compact_diagnostics_summary(
             manifest.metadata.schema_version, manifest.endpoint_count, manifest.profile_kind
         ),
         format!("registered backends: {adapter_summary}"),
+        format!(
+            "adapter compatibility: {}",
+            adapter_compatibility_summary
+        ),
         format!("backend preflight: {backend_preflight_summary}"),
         format!("selected endpoint: {selected_endpoint}"),
         format!("selected backend: {selected_backend}"),
@@ -681,6 +691,16 @@ mod tests {
                 transport_retry_budget: 1,
                 profile_kind: Some("ProviderProfile".to_string()),
             },
+            adapter_compatibility_diagnostics: veil_diagnostics::AdapterCompatibilityDiagnostics {
+                advertised_backends: vec!["xray-core".to_string()],
+                registered_backends: vec!["xray-core".to_string()],
+                missing_backends: vec![],
+                extra_backends: vec![],
+                selected_backend_registered: true,
+                compatibility_ok: true,
+                summary: "manifest and adapter registry align for advertised backends: xray-core"
+                    .to_string(),
+            },
             redacted_backend_preflight_diagnostics: Some(RedactedBackendPreflightDiagnostics {
                 backend_name: "xray-core".to_string(),
                 ready_for_dry_run_connect: true,
@@ -902,6 +922,7 @@ mod tests {
             build_compact_diagnostics_summary(
                 &manifest,
                 &adapter_registry,
+                "manifest and adapter registry align for advertised backends: mock-backend, xray-core",
                 Some(&backend_preflight),
                 &route,
                 &policy,
@@ -909,6 +930,7 @@ mod tests {
 
         assert!(summary.contains("manifest: schema v1, endpoints 1"));
         assert!(summary.contains("registered backends:"));
+        assert!(summary.contains("adapter compatibility: manifest and adapter registry align"));
         assert!(summary.contains("mock-backend[preflight=true,health=true,reload=false"));
         assert!(summary.contains("backend preflight: xray-core ready=true binary_present=false"));
         assert!(summary.contains("selected endpoint: edge-1"));

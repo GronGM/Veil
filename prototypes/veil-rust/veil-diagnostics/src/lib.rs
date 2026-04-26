@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use veil_adapter_api::AdapterRegistrySnapshot;
 use veil_manifest::{ProviderManifest, XrayEndpointMetadata};
 use veil_policy::{IncidentGuidance, RouteSelectionPolicy, RuntimeSupportAssessment};
 use veil_routing::RejectedRouteCandidate;
@@ -128,6 +129,17 @@ pub struct RedactedManifestDiagnostics {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdapterCompatibilityDiagnostics {
+    pub advertised_backends: Vec<String>,
+    pub registered_backends: Vec<String>,
+    pub missing_backends: Vec<String>,
+    pub extra_backends: Vec<String>,
+    pub selected_backend_registered: bool,
+    pub compatibility_ok: bool,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BackendPreflightCommandDiagnostics {
     pub program: String,
     pub args: Vec<String>,
@@ -165,6 +177,7 @@ pub struct SupportBundle {
     pub route_summary: String,
     pub endpoint_count: usize,
     pub redacted_manifest_diagnostics: RedactedManifestDiagnostics,
+    pub adapter_compatibility_diagnostics: AdapterCompatibilityDiagnostics,
     pub backend_preflight_diagnostics: Option<BackendPreflightDiagnostics>,
     pub redacted_backend_preflight_diagnostics: Option<RedactedBackendPreflightDiagnostics>,
     pub route_diagnostics: RouteDiagnostics,
@@ -181,6 +194,7 @@ pub struct RedactedSupportBundle {
     pub route_summary: String,
     pub endpoint_count: usize,
     pub redacted_manifest_diagnostics: RedactedManifestDiagnostics,
+    pub adapter_compatibility_diagnostics: AdapterCompatibilityDiagnostics,
     pub redacted_backend_preflight_diagnostics: Option<RedactedBackendPreflightDiagnostics>,
     pub redacted_route_diagnostics: RedactedRouteDiagnostics,
     pub redacted_policy_diagnostics: RedactedPolicyDiagnostics,
@@ -351,6 +365,75 @@ pub fn build_backend_preflight_diagnostics(
     }
 }
 
+pub fn build_adapter_compatibility_diagnostics(
+    manifest: &ProviderManifest,
+    adapter_registry: &AdapterRegistrySnapshot,
+    selected_backend_name: Option<&str>,
+) -> AdapterCompatibilityDiagnostics {
+    let mut advertised_backends = manifest
+        .capabilities
+        .iter()
+        .flat_map(|capability| capability.supported_dataplanes.iter().cloned())
+        .collect::<Vec<_>>();
+    advertised_backends.sort();
+    advertised_backends.dedup();
+
+    let mut registered_backends = adapter_registry
+        .entries
+        .iter()
+        .map(|entry| entry.metadata.backend_name.clone())
+        .collect::<Vec<_>>();
+    registered_backends.sort();
+    registered_backends.dedup();
+
+    let missing_backends = advertised_backends
+        .iter()
+        .filter(|backend| !registered_backends.contains(backend))
+        .cloned()
+        .collect::<Vec<_>>();
+    let extra_backends = registered_backends
+        .iter()
+        .filter(|backend| !advertised_backends.contains(backend))
+        .cloned()
+        .collect::<Vec<_>>();
+    let selected_backend_registered = selected_backend_name
+        .map(|backend| registered_backends.iter().any(|registered| registered == backend))
+        .unwrap_or(true);
+    let compatibility_ok = missing_backends.is_empty() && selected_backend_registered;
+
+    let summary = if compatibility_ok {
+        format!(
+            "manifest and adapter registry align for advertised backends: {}",
+            advertised_backends.join(", ")
+        )
+    } else {
+        format!(
+            "manifest/registry mismatch: missing={} extra={} selected_backend_registered={}",
+            if missing_backends.is_empty() {
+                "none".to_string()
+            } else {
+                missing_backends.join(",")
+            },
+            if extra_backends.is_empty() {
+                "none".to_string()
+            } else {
+                extra_backends.join(",")
+            },
+            selected_backend_registered
+        )
+    };
+
+    AdapterCompatibilityDiagnostics {
+        advertised_backends,
+        registered_backends,
+        missing_backends,
+        extra_backends,
+        selected_backend_registered,
+        compatibility_ok,
+        summary,
+    }
+}
+
 pub fn build_redacted_backend_preflight_diagnostics(
     preflight: &BackendPreflightDiagnostics,
 ) -> RedactedBackendPreflightDiagnostics {
@@ -377,6 +460,7 @@ pub fn build_redacted_backend_preflight_diagnostics(
 pub fn build_support_bundle(
     manifest_valid: bool,
     manifest: &ProviderManifest,
+    adapter_registry: &AdapterRegistrySnapshot,
     runtime_support: RuntimeSupportAssessment,
     backend_preflight_diagnostics: Option<BackendPreflightDiagnostics>,
     route_diagnostics: RouteDiagnostics,
@@ -384,6 +468,11 @@ pub fn build_support_bundle(
     incident: IncidentReport,
 ) -> SupportBundle {
     let redacted_manifest_diagnostics = build_redacted_manifest_diagnostics(manifest);
+    let adapter_compatibility_diagnostics = build_adapter_compatibility_diagnostics(
+        manifest,
+        adapter_registry,
+        route_diagnostics.selected_backend_name.as_deref(),
+    );
     let redacted_backend_preflight_diagnostics = backend_preflight_diagnostics
         .as_ref()
         .map(build_redacted_backend_preflight_diagnostics);
@@ -397,6 +486,7 @@ pub fn build_support_bundle(
         route_summary: route_diagnostics.route_summary.clone(),
         endpoint_count: manifest.endpoints.len(),
         redacted_manifest_diagnostics,
+        adapter_compatibility_diagnostics,
         backend_preflight_diagnostics,
         redacted_backend_preflight_diagnostics,
         route_diagnostics,
@@ -414,6 +504,7 @@ pub fn build_redacted_support_bundle(bundle: &SupportBundle) -> RedactedSupportB
         route_summary: bundle.redacted_route_diagnostics.route_summary.clone(),
         endpoint_count: bundle.endpoint_count,
         redacted_manifest_diagnostics: bundle.redacted_manifest_diagnostics.clone(),
+        adapter_compatibility_diagnostics: bundle.adapter_compatibility_diagnostics.clone(),
         redacted_backend_preflight_diagnostics: bundle
             .redacted_backend_preflight_diagnostics
             .clone(),
@@ -606,6 +697,7 @@ fn redact_policy_string_list(values: &[String]) -> RedactedStringListPolicyField
 #[cfg(test)]
 mod tests {
     use super::*;
+    use veil_adapter_api::AdapterRegistrySnapshot;
     use veil_manifest::demo_provider_manifest;
 
     #[test]
@@ -643,6 +735,7 @@ mod tests {
         let bundle = build_support_bundle(
             true,
             &manifest,
+            &AdapterRegistrySnapshot::default(),
             RuntimeSupportAssessment::mvp_supported(),
             None,
             route_diagnostics,
@@ -661,6 +754,7 @@ mod tests {
             bundle.redacted_policy_diagnostics.retry_budget_max_candidates,
             2
         );
+        assert!(!bundle.adapter_compatibility_diagnostics.compatibility_ok);
     }
 
     #[test]
@@ -840,6 +934,7 @@ mod tests {
         let bundle = build_support_bundle(
             true,
             &manifest,
+            &AdapterRegistrySnapshot::default(),
             RuntimeSupportAssessment::mvp_supported(),
             None,
             route_diagnostics,
@@ -852,6 +947,21 @@ mod tests {
         assert!(redacted.route_summary.contains(REDACTED_QUERY_VALUE));
         assert!(redacted.incident.recommended_action.contains(REDACTED_TOKEN));
         assert_eq!(redacted.redacted_manifest_diagnostics.endpoint_count, 1);
+    }
+
+    #[test]
+    fn adapter_compatibility_reports_missing_backends() {
+        let manifest = demo_provider_manifest();
+        let compatibility = build_adapter_compatibility_diagnostics(
+            &manifest,
+            &AdapterRegistrySnapshot::default(),
+            Some("xray-core"),
+        );
+
+        assert!(!compatibility.compatibility_ok);
+        assert!(compatibility.missing_backends.contains(&"xray-core".to_string()));
+        assert!(compatibility.missing_backends.contains(&"mock-backend".to_string()));
+        assert!(!compatibility.selected_backend_registered);
     }
 
     #[test]
