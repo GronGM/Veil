@@ -126,6 +126,11 @@ Exit criteria:
 - release claims are tied to real validation
 - public docs describe the actual state of readiness
 
+Current public slice:
+
+- repository-local workspace safety notes and ignore rules can land before the broader threat-model work is complete
+- these guardrails reduce accidental leakage risk, but they do not replace secret rotation or a full release review
+
 ## Working Rule
 
 Each phase should land in small, reviewable slices.

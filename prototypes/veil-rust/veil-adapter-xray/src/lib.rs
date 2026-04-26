@@ -3,6 +3,7 @@
 //! Xray adapter skeleton for Veil.
 
 use veil_adapter_api::{AdapterCapabilities, DataplaneBackend, DryRunPlan};
+use veil_transport::TransportProfile;
 
 /// Placeholder Xray backend adapter.
 #[derive(Debug, Clone, Default)]
@@ -27,6 +28,7 @@ impl DataplaneBackend for XrayBackend {
             supports_dry_run: true,
             renders_typed_config: true,
             requires_real_binary: true,
+            supported_transports: vec![TransportProfile::TlsTcp, TransportProfile::Grpc],
         }
     }
 }

@@ -3,3 +3,6 @@ name = "veil-manifest"
 edition.workspace = true
 license.workspace = true
 version.workspace = true
+
+[dependencies]
+veil-transport = { path = "../veil-transport" }

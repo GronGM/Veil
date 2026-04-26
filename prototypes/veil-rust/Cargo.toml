@@ -4,6 +4,8 @@ members = [
   "veil-adapter-api",
   "veil-adapter-xray",
   "veil-adapter-mock",
+  "veil-transport",
+  "veil-dry-run",
   "veil-manifest",
   "veil-policy",
   "veil-routing",

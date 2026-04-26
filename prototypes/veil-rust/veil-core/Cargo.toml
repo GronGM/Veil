@@ -9,5 +9,7 @@ veil-adapter-api = { path = "../veil-adapter-api" }
 veil-adapter-mock = { path = "../veil-adapter-mock" }
 veil-adapter-xray = { path = "../veil-adapter-xray" }
 veil-diagnostics = { path = "../veil-diagnostics" }
+veil-dry-run = { path = "../veil-dry-run" }
 veil-manifest = { path = "../veil-manifest" }
 veil-policy = { path = "../veil-policy" }
+veil-transport = { path = "../veil-transport" }

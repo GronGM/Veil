@@ -5,5 +5,6 @@ license.workspace = true
 version.workspace = true
 
 [dependencies]
+veil-dry-run = { path = "../veil-dry-run" }
 veil-manifest = { path = "../veil-manifest" }
 veil-policy = { path = "../veil-policy" }

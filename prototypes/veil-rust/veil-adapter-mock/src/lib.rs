@@ -3,6 +3,7 @@
 //! Mock adapter skeleton for Veil.
 
 use veil_adapter_api::{AdapterCapabilities, DataplaneBackend, DryRunPlan};
+use veil_transport::TransportProfile;
 
 /// Placeholder mock backend adapter for generic contract testing.
 #[derive(Debug, Clone, Default)]
@@ -27,6 +28,7 @@ impl DataplaneBackend for MockBackend {
             supports_dry_run: true,
             renders_typed_config: false,
             requires_real_binary: false,
+            supported_transports: vec![TransportProfile::TlsTcp],
         }
     }
 }

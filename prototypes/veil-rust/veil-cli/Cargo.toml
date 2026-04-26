@@ -11,3 +11,4 @@ veil-adapter-xray = { path = "../veil-adapter-xray" }
 veil-manifest = { path = "../veil-manifest" }
 veil-policy = { path = "../veil-policy" }
 veil-routing = { path = "../veil-routing" }
+veil-transport = { path = "../veil-transport" }

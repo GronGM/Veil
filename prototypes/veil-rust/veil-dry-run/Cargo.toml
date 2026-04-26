@@ -1,9 +1,10 @@
 [package]
-name = "veil-adapter-xray"
+name = "veil-dry-run"
 edition.workspace = true
 license.workspace = true
 version.workspace = true
 
 [dependencies]
 veil-adapter-api = { path = "../veil-adapter-api" }
-veil-transport = { path = "../veil-transport" }
+veil-manifest = { path = "../veil-manifest" }
+veil-policy = { path = "../veil-policy" }

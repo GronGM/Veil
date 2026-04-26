@@ -1,0 +1,16 @@
+# Local workspace artifacts that should never become repository content.
+/output/
+/user_files/
+/agent_files/
+
+# Common secret-like files and directories used in local testing.
+*.env
+*.key
+*.pem
+*.p12
+*.pfx
+*.token
+*.secret
+secrets/
+.secrets/
+credentials/

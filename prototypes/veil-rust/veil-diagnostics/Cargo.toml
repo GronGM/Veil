@@ -3,3 +3,6 @@ name = "veil-diagnostics"
 edition.workspace = true
 license.workspace = true
 version.workspace = true
+
+[dependencies]
+veil-dry-run = { path = "../veil-dry-run" }

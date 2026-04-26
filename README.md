@@ -97,7 +97,9 @@ The public branch now also includes the first `prototypes/veil-rust/` workspace 
 
 - `README.md` - project overview and goals
 - `docs/veil-architecture-rfc.md` - initial architecture direction
+- `docs/veil-gmvpn-audit.md` - repository-grounded GMvpn to Veil responsibility map
 - `docs/veil-phase-map.md` - public phase map and delivery shape
+- `docs/veil-workspace-safety.md` - local workspace and secret-handling guidance
 - `prototypes/README.md` - expectations for future prototype work
 - `prototypes/veil-rust/` - initial public Rust workspace skeleton
 - `.github/workflows/rust.yml` - CI checks for the public Rust workspace

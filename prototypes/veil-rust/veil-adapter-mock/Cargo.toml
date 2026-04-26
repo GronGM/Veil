@@ -6,3 +6,4 @@ version.workspace = true
 
 [dependencies]
 veil-adapter-api = { path = "../veil-adapter-api" }
+veil-transport = { path = "../veil-transport" }
