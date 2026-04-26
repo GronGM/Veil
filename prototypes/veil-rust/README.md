@@ -15,6 +15,8 @@ It now provides:
 - minimal placeholder types and entrypoints
 - an initial end-to-end dry-run path from `veil-cli` through `veil-core` into `veil-adapter-xray`
 - typed manifest input and a first policy-aware decision summary in the dry-run report
+- a redacted diagnostics view produced by `veil-diagnostics`
+- a simple `policy-mismatch` CLI scenario for a blocked backend decision
 
 It does not yet claim:
 
@@ -40,11 +42,12 @@ It does not yet claim:
 The current public dry-run slice is intentionally simple:
 
 - `veil-manifest` provides a typed demo manifest input
-- `veil-policy` evaluates a minimal backend allow rule
+- `veil-policy` evaluates a minimal backend allow rule and a `policy-mismatch` scenario
 - `veil-adapter-api` defines a minimal `DryRunPlan`
 - `veil-adapter-xray` returns a placeholder Xray dry-run plan
 - `veil-core` turns those inputs into a control-plane `DryRunReport`
-- `veil-cli` prints the rendered report
+- `veil-diagnostics` builds a redacted support-facing view
+- `veil-cli` prints both the control-plane report and the redacted diagnostics block
 
 This is meant to prove crate wiring and ownership boundaries before broader behavior lands.
 
@@ -58,6 +61,13 @@ cargo check --workspace
 cargo test --workspace
 ```
 
+## Example CLI Runs
+
+```bash
+cargo run -p veil-cli
+cargo run -p veil-cli -- policy-mismatch
+```
+
 ## Next Steps
 
-The next reviewable slices should add richer manifest fields, explicit policy reasons, and diagnostics crate integration without landing a broad rewrite in one jump.
+The next reviewable slices should add richer manifest fields, explicit diagnostics structures, and non-Xray adapter scenarios without landing a broad rewrite in one jump.
