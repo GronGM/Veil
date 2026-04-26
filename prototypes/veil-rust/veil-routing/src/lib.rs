@@ -332,21 +332,38 @@ fn failure_bucket_name(bucket: &FailureBucket) -> &'static str {
 
 pub fn demo_runtime_state() -> RouteRuntimeState {
     RouteRuntimeState {
-        endpoints: vec![EndpointRuntimeState {
-            endpoint_id: "edge-1".to_string(),
-            cooldown: CooldownState {
-                cooling_down: false,
-                remaining_seconds: 0,
+        endpoints: vec![
+            EndpointRuntimeState {
+                endpoint_id: "edge-1".to_string(),
+                cooldown: CooldownState {
+                    cooling_down: false,
+                    remaining_seconds: 0,
+                },
+                locally_disabled: false,
+                health_score: 2,
+                last_failure_bucket: None,
+                reenable: ReenableState {
+                    pending: false,
+                    ready: false,
+                    backoff_seconds: 0,
+                },
             },
-            locally_disabled: false,
-            health_score: 2,
-            last_failure_bucket: None,
-            reenable: ReenableState {
-                pending: false,
-                ready: false,
-                backoff_seconds: 0,
+            EndpointRuntimeState {
+                endpoint_id: "edge-mock-1".to_string(),
+                cooldown: CooldownState {
+                    cooling_down: false,
+                    remaining_seconds: 0,
+                },
+                locally_disabled: false,
+                health_score: 0,
+                last_failure_bucket: None,
+                reenable: ReenableState {
+                    pending: false,
+                    ready: false,
+                    backoff_seconds: 0,
+                },
             },
-        }],
+        ],
     }
 }
 
@@ -375,6 +392,7 @@ mod tests {
         assert!(selection.selected.score.dataplane_preferred);
         assert_eq!(selection.selected.score.health_score, 2);
         assert!(!selection.selected.score.reenable_pending);
+        assert_eq!(selection.candidates.len(), 2);
     }
 
     #[test]
@@ -554,6 +572,37 @@ mod tests {
                 .iter()
                 .flat_map(|candidate| candidate.reasons.iter())
                 .any(|reason| reason.contains("allowlist"))
+        );
+    }
+
+    #[test]
+    fn second_backend_can_be_selected_when_xray_is_denylisted() {
+        let manifest = demo_provider_manifest();
+        let mut policy = RouteSelectionPolicy::default();
+        policy.backends.deny = vec!["xray-core".to_string()];
+
+        let selection = select_best_route(
+            &manifest,
+            &SelectionContext {
+                client_platform: "linux".to_string(),
+                last_known_good_endpoint_id: None,
+                retry_budget: RetryBudget { max_candidates: 2 },
+                runtime_state: demo_runtime_state(),
+                policy,
+            },
+        )
+        .expect("mock backend should remain selectable");
+
+        assert_eq!(selection.selected.endpoint.id, "edge-mock-1");
+        assert_eq!(
+            selection.selected.endpoint.dataplane.as_deref(),
+            Some("mock-backend")
+        );
+        assert!(
+            selection
+                .rejected
+                .iter()
+                .any(|candidate| candidate.endpoint_id == "edge-1")
         );
     }
 }

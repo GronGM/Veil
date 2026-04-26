@@ -165,7 +165,7 @@ pub fn demo_provider_manifest() -> ProviderManifest {
         },
         capabilities: vec![PlatformCapability {
             platform: "linux".to_string(),
-            supported_dataplanes: vec!["xray-core".to_string()],
+            supported_dataplanes: vec!["xray-core".to_string(), "mock-backend".to_string()],
             network_adapter: "linux".to_string(),
             status: "mvp-supported".to_string(),
         }],
@@ -176,23 +176,37 @@ pub fn demo_provider_manifest() -> ProviderManifest {
         features: FeatureFlags {
             profile_kind: Some(ProfileKind::ProviderProfile),
         },
-        endpoints: vec![Endpoint {
-            id: "edge-1".to_string(),
-            host: "198.51.100.10".to_string(),
-            port: 443,
-            transport: "https".to_string(),
-            region: "eu-central".to_string(),
-            dataplane: Some("xray-core".to_string()),
-            supported_client_platforms: vec!["linux".to_string()],
-            logical_server: Some("edge".to_string()),
-            provider_profile_schema_version: Some(PROVIDER_PROFILE_SCHEMA_VERSION),
-            xray: Some(XrayEndpointMetadata {
-                protocol: "vless".to_string(),
-                stream: "tcp".to_string(),
-                security: "tls".to_string(),
-                server_name: Some("cdn.example.net".to_string()),
-            }),
-        }],
+        endpoints: vec![
+            Endpoint {
+                id: "edge-1".to_string(),
+                host: "198.51.100.10".to_string(),
+                port: 443,
+                transport: "https".to_string(),
+                region: "eu-central".to_string(),
+                dataplane: Some("xray-core".to_string()),
+                supported_client_platforms: vec!["linux".to_string()],
+                logical_server: Some("edge".to_string()),
+                provider_profile_schema_version: Some(PROVIDER_PROFILE_SCHEMA_VERSION),
+                xray: Some(XrayEndpointMetadata {
+                    protocol: "vless".to_string(),
+                    stream: "tcp".to_string(),
+                    security: "tls".to_string(),
+                    server_name: Some("cdn.example.net".to_string()),
+                }),
+            },
+            Endpoint {
+                id: "edge-mock-1".to_string(),
+                host: "203.0.113.50".to_string(),
+                port: 8443,
+                transport: "https".to_string(),
+                region: "us-west".to_string(),
+                dataplane: Some("mock-backend".to_string()),
+                supported_client_platforms: vec!["linux".to_string()],
+                logical_server: Some("mock-edge".to_string()),
+                provider_profile_schema_version: Some(PROVIDER_PROFILE_SCHEMA_VERSION),
+                xray: None,
+            },
+        ],
     }
 }
 
@@ -238,5 +252,22 @@ mod tests {
 
         let error = validate_manifest(&manifest).expect_err("validation must fail");
         assert!(matches!(error, ManifestError::MissingXrayMetadata { .. }));
+    }
+
+    #[test]
+    fn demo_manifest_includes_second_backend_for_adapter_api_exercises() {
+        let manifest = demo_provider_manifest();
+
+        assert_eq!(manifest.endpoints.len(), 2);
+        assert!(
+            manifest.capabilities[0]
+                .supported_dataplanes
+                .iter()
+                .any(|backend| backend == "mock-backend")
+        );
+        assert_eq!(
+            manifest.endpoints[1].dataplane.as_deref(),
+            Some("mock-backend")
+        );
     }
 }

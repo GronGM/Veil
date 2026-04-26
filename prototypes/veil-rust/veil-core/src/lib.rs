@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 use veil_adapter_api::{AdapterContext, AdapterRegistrySnapshot, StaticAdapterRegistry};
+use veil_adapter_mock::MockDryRunBackend;
 use veil_adapter_xray::XrayDryRunBackend;
 use veil_diagnostics::{
     build_backend_preflight_diagnostics, build_incident_report, build_route_diagnostics,
@@ -99,6 +100,7 @@ pub fn build_dry_run_plan_with_policy(
         session_id: session_id.to_string(),
     };
     let mut registry = StaticAdapterRegistry::new();
+    registry.register(Box::new(MockDryRunBackend));
     registry.register(Box::new(XrayDryRunBackend));
     let adapter_registry = registry.metadata_snapshot();
     let mut lifecycle = vec![SessionEvent {
@@ -318,7 +320,7 @@ mod tests {
                 .ready_for_dry_run_connect
         );
         assert_eq!(plan.lifecycle.len(), 5);
-        assert_eq!(plan.adapter_registry.entries.len(), 1);
+        assert_eq!(plan.adapter_registry.entries.len(), 2);
     }
 
     #[test]
@@ -353,8 +355,8 @@ mod tests {
 
         assert_eq!(plan.outcome, SessionOutcome::Planned);
         assert!(plan.selected_endpoint_id.is_none());
-        assert_eq!(plan.rejected_routes.len(), 1);
-        assert_eq!(plan.support_bundle.route_diagnostics.rejected_routes.len(), 1);
+        assert_eq!(plan.rejected_routes.len(), 2);
+        assert_eq!(plan.support_bundle.route_diagnostics.rejected_routes.len(), 2);
         assert_eq!(
             plan.support_bundle
                 .redacted_policy_diagnostics
@@ -367,6 +369,32 @@ mod tests {
                 .reasons
                 .iter()
                 .any(|reason| reason.contains("denylisted"))
+        );
+    }
+
+    #[test]
+    fn dry_run_plan_can_fall_back_to_mock_backend_when_xray_is_denylisted() {
+        let manifest: ProviderManifest = demo_provider_manifest();
+        let mut policy = RouteSelectionPolicy::default();
+        policy.backends.deny = vec!["xray-core".to_string()];
+
+        let plan = build_dry_run_plan_with_policy(
+            &manifest,
+            RuntimeSupportAssessment::mvp_supported(),
+            IncidentGuidance::default(),
+            policy,
+        );
+
+        assert_eq!(plan.outcome, SessionOutcome::ReadyToConnect);
+        assert_eq!(plan.selected_endpoint_id.as_deref(), Some("edge-mock-1"));
+        assert_eq!(plan.selected_backend_name.as_deref(), Some("mock-backend"));
+        assert!(
+            plan.support_bundle
+                .backend_preflight_diagnostics
+                .as_ref()
+                .expect("backend preflight")
+                .backend_name
+                == "mock-backend"
         );
     }
 }

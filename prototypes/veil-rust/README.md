@@ -12,6 +12,7 @@ Current crates:
 
 - `veil-core`
 - `veil-adapter-api`
+- `veil-adapter-mock`
 - `veil-adapter-xray`
 - `veil-diagnostics`
 - `veil-manifest`
@@ -43,6 +44,7 @@ Recent prototype slice:
 - `veil-adapter-xray` now renders a typed Xray-like config model, builds a separate command spec, and reports dry-run preflight details without requiring a real `xray` binary
 - `veil-core` now carries backend preflight details into the dry-run plan, and `veil-cli demo --export-redacted-preflight <path>` can write a standalone safe artifact for review
 - `veil-adapter-api` now defines the generic dry-run preflight contract, so future adapters can plug into the same control-plane path without backend-specific branching in `veil-core`
+- `veil-adapter-mock` now provides a second dry-run backend so route selection and adapter preflight can be exercised across multiple registered backends
 
 Example policy files:
 

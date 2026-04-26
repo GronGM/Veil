@@ -94,8 +94,8 @@ Reference mapping from GMvpn:
                  |                             |
                  v                             v
       +-----------------------+     +-----------------------+
-      |  veil-adapter-xray    |     | future adapters       |
-      | render/apply/check    |     | sing-box, bridge, etc |
+      |  veil-adapter-xray    |     | veil-adapter-mock     |
+      | render/apply/check    |     | demo/test backend     |
       +-----------------------+     +-----------------------+
 ```
 
@@ -198,6 +198,20 @@ Reference mapping from GMvpn:
 - v2/Research Scope: alternative renderer targets or bridge contracts for non-process runtimes.
 - Failure Modes: unsupported endpoint metadata, invalid generated config, missing binary, crash after start.
 - Test Strategy: renderer and dry-run adapter tests plus smoke fixtures.
+
+### `veil-adapter-mock`
+
+- Responsibility: provide a second safe demo backend for exercising adapter registration, dry-run preflight, and control-plane selection logic without backend-specific assumptions.
+- Inputs: normalized endpoint config that opts into `mock-backend`, dry-run context, local runtime paths.
+- Outputs: rendered mock config, dry-run command preview, runtime snapshot, health result.
+- Public Interfaces: `MockDryRunBackend`.
+- Dependencies: `veil-adapter-api`, typed manifest endpoint model.
+- Hot-swappable Parts: command args and rendered payload shape may change independently of the control plane.
+- MVP Scope: dry-run config rendering and preflight coverage for a non-Xray backend.
+- v1 Scope: richer fake capability descriptors for integration tests.
+- v2/Research Scope: dedicated harness adapters for regression suites and compatibility matrices.
+- Failure Modes: unsupported endpoint selection, config rendering drift from adapter contract, test-only adapter leaking into user-facing claims.
+- Test Strategy: deterministic unit tests that confirm the generic adapter boundary works across more than one backend.
 
 ### `veil-cli`
 
