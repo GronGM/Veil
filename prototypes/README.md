@@ -14,6 +14,8 @@ Examples of suitable prototype content:
 - manifest, policy, or routing prototypes
 - diagnostics and support-bundle experiments
 
+The public branch now includes `veil-rust/` as the first visible workspace skeleton for future Rust prototype slices.
+
 ## What Should Not Happen Here
 
 This directory should not be used to:
