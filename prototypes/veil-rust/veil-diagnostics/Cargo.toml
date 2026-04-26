@@ -1,0 +1,5 @@
+[package]
+name = "veil-diagnostics"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
